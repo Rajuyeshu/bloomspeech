@@ -1,0 +1,142 @@
+App Requirements Specification
+Project Overview:
+This app would support speech-language pathologists/ clinicians in delivering Response Cost Therapy to preschool children who stutter. The target users are children aged 3-6 years from India and speech-language pathologists/clinicians.
+Dual-Device Operation Mode: The application operates across a synchronized connection linking the Clinician’s device/dashboard and the Kid’s mobile device. When a doctor starts a session, it pushes an instant notification to the respective kid’s mobile so they can join the session/video call directly. The active therapy interface, including the token board updates, in-app celebrations, and interactive mini-games, synchronizes automatically and renders simultaneously on both screens.
+Brief outline:
+After each utterance, the clinician judges it as fluent or dysfluent.
+A fluent utterance earns tokens (default: +1 per utterance).
+A dysfluent utterance results in token withdrawal (default: -1 per utterance).
+Token values are fully configurable by the clinician before each session.
+When the child accumulates the preset goal number of tokens, a reward is delivered.
+After the reward is claimed, the token board resets and the session continues.
+Feedback delivery:
+Feedback must be immediate (within 1 second of the clinician tap) and child-appropriate. All feedback audio in both English and Kannada (language switchable in settings). The visual animations and spoken audio play on both the doctor's and the kid's screens at the exact same time.
+Fluent utterance feedback
+Visual: celebratory animation specific to the active theme (e.g., a diya lights up, a mango grows). Audio: cheerful chime + spoken phrase 'Wow, that was smooth speech!' in both English and Kannada ('Shaabaash, tumbaa channaagi maathadde!'). Token board updates instantly across both devices.
+Dysfluent utterance feedback
+Visual: gentle, non-punitive animation (e.g., diya flickers). Audio: soft sound + spoken phrase 'Oh, that was a bumpy one! Try again!' in English and Kannada ('Adu thodlithu, innondu saari helu!'). One token is visibly removed from the board on both devices.
+18: Clinician-controlled parameters (Presettable):
+19: Parameter	Default	Range
+20: Fluent award (+)	+1	Adjustable: +1 to +5 (with increment/decrement buttons)
+21: Dysfluent cost (-)	-1	Adjustable: -1 to -3 (with increment/decrement buttons)
+22: Token goal	10 tokens	Adjustable: 5 to 30 total tokens (with increment/decrement buttons)
+23: Active therapy level	Word level	5 levels: Word Level, Sentence Level, Continuous Speech, Narrative Speech, Conversational Speech
+24: Reward Type	In-app mini-game	3 Options: In-app animation, In-app mini-game (with game selector sub-section), Physical reward
+25: Active play theme	Themes appropriate to Indian context	Clinician or child selects via 'Choose Theme ->' flow
+26: Child name, age and gender	Entered at setup	Used in feedback phrases
+27: Session duration alert	Off	Optional timer alert at 20/30/45 minutes
+28: Themes / Games:
+29: Play themes/ games: Culturally appropriate play themes. Minimum of 20-30 themes. Scenes, characters, and soundscapes should use locally recognisable references to maximise engagement for the target population. Each theme must have a minimum of 20 distinct token positions visible to the child.
+30: Example:
+31: Theme name: 🎨 Rangoli design builder
+32: Token mechanic: Each token fills one petal or section of a rangoli pattern
+33: Cultural appropriateness: Daily rangoli drawing by children and women
+34: Reward animation: Rangoli complete; vibrant colour burst
+35: Treatment levels:
+36: Therapy progresses across five levels (fully supported across the doctor's login dashboard and the child's profile configuration). The app must support clinician-selected switching between levels at any point during a session. The active level should be displayed persistently at the top of the screen. Below the treatment level selection grid, an interactive helper description text box displays the prompt summary for the selected level (e.g. "2–4 connected sentences on same topic").
+37: Level	Speech target	Examplar task	Token trigger	SLP/ Clinician prompt
+38: 1 — Word speech level	Single target words	Naming objects/flashcards	Tapped immediately following word completion	"What is this?"
+39: 2 — Sentence level	Single fluent sentences (3–8 words)	Child describes a picture: 'Amma is cooking rice'	Clinician taps Smooth/Bumpy after each sentence	'Tell me one thing about this picture'
+40: 3 — Continuous speech level	2–4 connected sentences on same topic	Child describes a sequence of pictures	Tapped after each 2–4 sentence block	'Tell me what is happening here, then what happened next'
+41: 4 — Narrative speech level	Short story retell (5–8 sentences)	Child retells a familiar Panchatantra story	Tapped after each narrative attempt	'Tell me the whole story of the clever crow'
+42: 5 — Conversational speech level	Back-and-forth dialogue (2–3 turns)	Role play: buying vegetables at a market	Tapped after each conversational turn	'Now you are the shopkeeper. What do you say?'
+43: The application may include picture-sequence story stimuli of varying complexity to elicit narrative speech. Clinicians may select a story sequence, following which the child narrates the events depicted.
+44: Adaptations required:
+45: Word level: Single large interactive targets; feedback immediate per item.
+46: Sentence level: single large Smooth / Bumpy tap buttons. Feedback should be immediate per sentence.
+47: Continuous speech level: tap buttons can remain the same; the clinician rates each block of 2–4 sentences as a unit.
+48: Narrative level: an optional 'hold' indicator can let the clinician mark the start of a narrative and rate the whole retell as one unit.
+49: Conversational level: two-turn logging — clinician can tag each turn separately within the same session log entry.
+50: Reward mechanism:
+51: Types of Rewards:
+52: Clinician selects one of three Reward Type options during setup:
+53: 1. In-app animation: theme-specific full-screen celebration (5–8 seconds, child-interactive sparkles/sounds).
+54: 2. In-app mini-game: brief 60-second mini-game unlocks (e.g. Bubble Bursting, Plant Watering, Rangoli Painter) selected via a dedicated mini-game subsection in setup.
+55: 3. Physical reward: customizable physical reward reminder (e.g., sticker, stamp, star) displayed on screen when token goal is reached.
+56: When the goal is reached, the child may tap their mobile screen to interact with the reward animation or play the selected mini-game. The clinician retains full control and taps a 'Done' button to dismiss the reward screen and reset the token board for the next cycle so the session continues uninterrupted.
+57: Session Management:
+58: Session setup screen:
+59: Before starting a session, the clinician completes a setup screen capturing:
+60: - Child profile details & Session number
+61: - Active Treatment Level grid (Word Level, Sentence Level, Continuous Speech, Narrative Speech, Conversational Speech) with target description text box
+62: - Token Configuration container with 3 data counters (Fluent award (+), Dysfluent cost (-), and Token goal up to 30 tokens) with increment/decrement steppers (`+`/`-`)
+63: - Reward Type section with radio buttons for In-app animation, In-app mini-game (with selectable mini-games sub-section), and Physical reward
+64: - Session Duration Alert options (Off, 20min, 30min, 45min)
+65: - Dual-Device Mode sync toggle
+66: - Primary action button: 'Choose Theme ->' navigating to theme selection screen
+Session data recorded:
+Timestamp of each clinician tap (fluent or dysfluent)
+Running token count at each tap
+Number of reward cycles completed per session
+Total fluent and dysfluent utterance counts
+Fluent Unit Percentage (fluent / total x 100)
+Session duration
+Active level and theme
+Session summary screen:
+After the clinician taps 'End session', a summary screen displays:
+Fluency unit % with a simple trend indicator (up/down vs previous session)
+Total utterances, fluent count, dysfluent count
+Token cycles completed
+Session duration
+A one-tap option to export summary as a PDF or share via WhatsApp (common in Indian clinical contexts)
+App structure:
+Authentication:
+- Both Clinician and Patient/Kid login screens feature "Continue with Google" sign-in option.
+- Username for both Clinician and Patient/Kid accounts is their registered Email address.
+Screen flow:
+84: Splash / home screen - logo, 'Start new session' button, 'View history' button
+85: Child profile selection - existing Child (from history) or new child
+86: Session setup screen - parameters as listed in Session Setup Screen (including active Mini-Game selector and Child Notification Handshake toggle)
+Theme selection screen - theme cards, child can tap to preview
+Active session screen - main therapy screen (Doctor operates controls, video call overlay runs, state syncs automatically to Kid's screen)
+Reward screen - full-screen animation / mini-game (visible and playable on both devices simultaneously)
+Session summary screen - stats and export
+Session history screen - list of past sessions with date, fluency rate, level
+Child progress tracking:
+The app must include a dedicated Progress Dashboard accessible to the clinician from the home screen. This dashboard must provide a longitudinal view of each child's fluency development across all recorded sessions, enabling the clinician to make evidence-informed decisions about when to advance treatment levels, adjust token ratios, or modify goals.
+Child profile and session history:
+Each child has a persistent profile that stores all session data. The clinician accesses a child's profile from the home screen by tapping their name card. The profile screen shows:
+Child name, age, gender, and date of enrolment
+Total number of sessions completed
+Current treatment level (from Word up to Conversational level)
+Date of last session
+A quick-view fluency trend badge (Improving / Stable / Needs attention) based on the last 3 sessions
+A scrollable list of all past sessions, each entry showing:
+Session number and date
+Treatment level active during that session
+Total utterances recorded
+Fluency rate % for that session
+Number of reward cycles completed
+Duration of session
+Theme/ Game used
+A tap to expand and view the full utterance-by-utterance log
+Fluency progress chart:
+A line graph plotted across all sessions for the selected child:
+X-axis: session number (or date)
+Y-axis: fluency unit percentage (0–100%)
+Each data point is tappable to reveal that session's stats in a tooltip
+Treatment level changes are marked on the chart as vertical dashed lines with a label (e.g., 'Moved to sentence level', 'Moved to narrative level')
+A shaded target zone (e.g., 80–100%) is shown to indicate the clinical goal range
+The chart can be filtered by treatment level (show only word-level sessions, sentence-level sessions, etc.)
+Token economy trend:
+A secondary chart (bar or area) showing across sessions:
+Average tokens earned per session
+Number of reward cycles completed per session
+Ratio of fluent to dysfluent utterances visualised as a stacked bar
+Treatment level progression tracker:
+A visual milestone timeline showing when the child was introduced to each treatment level:
+A horizontal timeline with 5 nodes: Word → Sentence → Continuous → Narrative → Conversational
+Completed levels shown in solid colour with the date they were introduced
+Current level pulsing/highlighted
+Future levels shown in muted grey
+Tapping a level node shows: date introduced, average fluency rate while at that level, number of sessions completed at that level
+Session comparison view
+The clinician can select any two sessions and place them side by side for direct comparison.
+Option for progress report generation
+A visual summary screen can be shown for the child at the end of a session or during a review.
+Technical requirements:
+Primary clinician device: Android smartphone (6–7 inch screen) or Tablet (accesses the doctor's login dashboard)
+Primary patient device: Kid's mobile phone (receives connection notification, streams video call, and updates game/reward interface)
+Connectivity: Real-time data synchronization system between Doctor and Kid screens via network sockets.
+Offline-first: All core local therapy functions and data logging work without internet if the session is conducted in person on a single device. Cloud sync updates session data to the clinician account when online.
+All child data stored securely by default.

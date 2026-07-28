@@ -1,0 +1,620 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../../config/theme/app_colors.dart';
+import '../../config/theme/app_text_styles.dart';
+import '../../config/theme/app_theme.dart';
+import '../../config/routes/app_router.dart';
+import '../../config/constants/app_constants.dart';
+import '../../services/auth_service.dart';
+import '../../services/firestore_service.dart';
+import '../../models/session.dart';
+
+class ProgressDashboard extends ConsumerWidget {
+  final String childId;
+  const ProgressDashboard({super.key, required this.childId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) {
+      return const Scaffold(body: Center(child: Text('Login required')));
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Progress Dashboard'),
+        leading: IconButton(
+          onPressed: () => context.pop(),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+        ),
+        actions: [
+          IconButton(
+            onPressed: () => context.goNamed(
+              AppRouter.sessionCompare,
+              pathParameters: {'childId': childId},
+            ),
+            icon: const Icon(Icons.compare_arrows_rounded),
+            tooltip: 'Compare Sessions',
+          ),
+        ],
+      ),
+      body: StreamBuilder<List<Session>>(
+        stream: ref.read(firestoreServiceProvider).getSessions(
+              clinicianId: user.uid,
+              childId: childId,
+            ),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final sessions = (snapshot.data ?? []).reversed.toList();
+
+          if (sessions.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.insights_rounded,
+                      size: 60, color: AppColors.textHint.withValues(alpha: 0.3)),
+                  const SizedBox(height: 16),
+                  Text('No session data yet',
+                      style: AppTextStyles.headlineSmall),
+                  const SizedBox(height: 8),
+                  Text('Complete a session to see progress',
+                      style: AppTextStyles.bodyMedium
+                          .copyWith(color: AppColors.textSecondary)),
+                ],
+              ),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ─── Fluency Progress Chart ───
+                _buildSectionTitle('Fluency Progress', Icons.show_chart_rounded),
+                const SizedBox(height: 14),
+                _buildFluencyChart(sessions).animate().fadeIn(duration: 600.ms),
+
+                const SizedBox(height: 28),
+
+                // ─── Token Economy Trend ───
+                _buildSectionTitle(
+                    'Token Economy Trend', Icons.toll_rounded),
+                const SizedBox(height: 14),
+                _buildTokenTrendChart(sessions)
+                    .animate()
+                    .fadeIn(delay: 200.ms, duration: 600.ms),
+
+                const SizedBox(height: 28),
+
+                // ─── Treatment Level Timeline ───
+                _buildSectionTitle(
+                    'Treatment Level Progression', Icons.timeline_rounded),
+                const SizedBox(height: 14),
+                _buildLevelTimeline(sessions)
+                    .animate()
+                    .fadeIn(delay: 400.ms, duration: 600.ms),
+
+                const SizedBox(height: 28),
+
+                // ─── Quick Stats ───
+                _buildSectionTitle('Overall Stats', Icons.analytics_rounded),
+                const SizedBox(height: 14),
+                _buildOverallStats(sessions)
+                    .animate()
+                    .fadeIn(delay: 500.ms, duration: 600.ms),
+
+                const SizedBox(height: 32),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.primary, size: 20),
+        const SizedBox(width: 8),
+        Text(title, style: AppTextStyles.headlineSmall),
+      ],
+    );
+  }
+
+  // ─── Fluency Line Chart ───
+  Widget _buildFluencyChart(List<Session> sessions) {
+    final spots = sessions.asMap().entries.map((entry) {
+      return FlSpot(
+        entry.key.toDouble(),
+        entry.value.stats.fluencyPercentage,
+      );
+    }).toList();
+
+    return Container(
+      height: 250,
+      padding: const EdgeInsets.fromLTRB(8, 20, 20, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: 100,
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: 20,
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: AppColors.textHint.withValues(alpha: 0.1),
+              strokeWidth: 1,
+            ),
+          ),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 1,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index < 0 || index >= sessions.length) {
+                    return const SizedBox();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '#${sessions[index].sessionNumber}',
+                      style: AppTextStyles.labelSmall.copyWith(fontSize: 9),
+                    ),
+                  );
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 35,
+                interval: 20,
+                getTitlesWidget: (value, meta) => Text(
+                  '${value.toInt()}%',
+                  style: AppTextStyles.labelSmall.copyWith(fontSize: 9),
+                ),
+              ),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          // Clinical goal zone (80-100%)
+          rangeAnnotations: RangeAnnotations(
+            horizontalRangeAnnotations: [
+              HorizontalRangeAnnotation(
+                y1: AppConstants.clinicalGoalMin,
+                y2: AppConstants.clinicalGoalMax,
+                color: AppColors.smoothGreen.withValues(alpha: 0.08),
+              ),
+            ],
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              curveSmoothness: 0.3,
+              color: AppColors.primary,
+              barWidth: 3,
+              dotData: FlDotData(
+                show: true,
+                getDotPainter: (spot, percent, barData, index) {
+                  return FlDotCirclePainter(
+                    radius: 4,
+                    color: AppColors.primary,
+                    strokeWidth: 2,
+                    strokeColor: Colors.white,
+                  );
+                },
+              ),
+              belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.15),
+                    AppColors.primary.withValues(alpha: 0.02),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+          ],
+          lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+              getTooltipItems: (touchedSpots) {
+                return touchedSpots.map((spot) {
+                  final sessionIndex = spot.x.toInt();
+                  if (sessionIndex >= sessions.length) return null;
+                  final session = sessions[sessionIndex];
+                  return LineTooltipItem(
+                    '${session.stats.fluencyPercentage.toStringAsFixed(1)}%\n'
+                    '${session.stats.totalUtterances} utt.',
+                    AppTextStyles.labelSmall.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  );
+                }).toList();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Token Trend Bar Chart ───
+  Widget _buildTokenTrendChart(List<Session> sessions) {
+    return Container(
+      height: 220,
+      padding: const EdgeInsets.fromLTRB(8, 20, 20, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: BarChart(
+        BarChartData(
+          alignment: BarChartAlignment.spaceAround,
+          maxY: sessions.fold<double>(0, (max, s) {
+                final total = s.stats.totalUtterances.toDouble();
+                return total > max ? total : max;
+              }) *
+              1.2,
+          barGroups: sessions.asMap().entries.map((entry) {
+            final s = entry.value;
+            return BarChartGroupData(
+              x: entry.key,
+              barRods: [
+                BarChartRodData(
+                  toY: s.stats.fluentCount.toDouble(),
+                  color: AppColors.smoothGreen,
+                  width: 10,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+                BarChartRodData(
+                  toY: s.stats.dysfluentCount.toDouble(),
+                  color: AppColors.bumpyOrange,
+                  width: 10,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index < 0 || index >= sessions.length) {
+                    return const SizedBox();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '#${sessions[index].sessionNumber}',
+                      style: AppTextStyles.labelSmall.copyWith(fontSize: 9),
+                    ),
+                  );
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 30,
+                getTitlesWidget: (value, meta) => Text(
+                  '${value.toInt()}',
+                  style: AppTextStyles.labelSmall.copyWith(fontSize: 9),
+                ),
+              ),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: AppColors.textHint.withValues(alpha: 0.08),
+              strokeWidth: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Level Timeline ───
+  Widget _buildLevelTimeline(List<Session> sessions) {
+    final levels = [
+      TherapyLevel.word,
+      TherapyLevel.sentence,
+      TherapyLevel.continuousSpeech,
+      TherapyLevel.narrative,
+      TherapyLevel.conversational,
+    ];
+
+    // Determine which levels have been used
+    final usedLevels = <String>{};
+    for (final s in sessions) {
+      usedLevels.add(s.therapyLevel);
+    }
+    final currentLevel =
+        sessions.isNotEmpty ? sessions.last.therapyLevel : 'word';
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        children: [
+          // Timeline nodes
+          Row(
+            children: levels.asMap().entries.map((entry) {
+              final index = entry.key;
+              final level = entry.value;
+              final isUsed = usedLevels.contains(level.name);
+              final isCurrent = level.name == currentLevel;
+              final levelColor = _getLevelColor(level);
+
+              return Expanded(
+                child: Column(
+                  children: [
+                    // Node
+                    Row(
+                      children: [
+                        if (index > 0)
+                          Expanded(
+                            child: Container(
+                              height: 3,
+                              color: isUsed
+                                  ? levelColor
+                                  : AppColors.textHint.withValues(alpha: 0.15),
+                            ),
+                          ),
+                        Container(
+                          width: isCurrent ? 36 : 28,
+                          height: isCurrent ? 36 : 28,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isUsed
+                                ? levelColor
+                                : AppColors.textHint.withValues(alpha: 0.15),
+                            border: isCurrent
+                                ? Border.all(
+                                    color: levelColor.withValues(alpha: 0.3),
+                                    width: 4)
+                                : null,
+                            boxShadow: isCurrent
+                                ? [
+                                    BoxShadow(
+                                      color: levelColor.withValues(alpha: 0.3),
+                                      blurRadius: 10,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${level.levelNumber}',
+                              style: AppTextStyles.labelSmall.copyWith(
+                                color: isUsed ? Colors.white : AppColors.textHint,
+                                fontWeight: FontWeight.w700,
+                                fontSize: isCurrent ? 12 : 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (index < levels.length - 1)
+                          Expanded(
+                            child: Container(
+                              height: 3,
+                              color: usedLevels.contains(levels[index + 1].name)
+                                  ? _getLevelColor(levels[index + 1])
+                                  : AppColors.textHint.withValues(alpha: 0.15),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      level.shortName,
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: isUsed ? levelColor : AppColors.textHint,
+                        fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                        fontSize: 9,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Legend
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildLegendDot(AppColors.smoothGreen, 'Completed'),
+              const SizedBox(width: 16),
+              _buildLegendDot(AppColors.primary, 'Current'),
+              const SizedBox(width: 16),
+              _buildLegendDot(AppColors.textHint.withValues(alpha: 0.3), 'Upcoming'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: AppTextStyles.labelSmall.copyWith(fontSize: 10)),
+      ],
+    );
+  }
+
+  Color _getLevelColor(TherapyLevel level) {
+    switch (level) {
+      case TherapyLevel.word:
+        return AppColors.levelWord;
+      case TherapyLevel.sentence:
+        return AppColors.levelSentence;
+      case TherapyLevel.continuousSpeech:
+        return AppColors.levelContinuous;
+      case TherapyLevel.narrative:
+        return AppColors.levelNarrative;
+      case TherapyLevel.conversational:
+        return AppColors.levelConversational;
+    }
+  }
+
+  // ─── Overall Stats ───
+  Widget _buildOverallStats(List<Session> sessions) {
+    final totalUtterances =
+        sessions.fold<int>(0, (sum, s) => sum + s.stats.totalUtterances);
+    final totalFluent =
+        sessions.fold<int>(0, (sum, s) => sum + s.stats.fluentCount);
+    final totalDysfluent =
+        sessions.fold<int>(0, (sum, s) => sum + s.stats.dysfluentCount);
+    final totalRewards =
+        sessions.fold<int>(0, (sum, s) => sum + s.stats.rewardCyclesCompleted);
+    final avgFluency = sessions.isNotEmpty
+        ? sessions.fold<double>(0, (sum, s) => sum + s.stats.fluencyPercentage) /
+            sessions.length
+        : 0.0;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatTile(
+                  'Total Sessions', '${sessions.length}',
+                  Icons.calendar_today_outlined, AppColors.primary)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatTile(
+                  'Avg Fluency', '${avgFluency.toStringAsFixed(1)}%',
+                  Icons.trending_up_rounded, AppColors.smoothGreen)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatTile(
+                  'Total Utterances', '$totalUtterances',
+                  Icons.chat_bubble_outline, AppColors.info)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatTile(
+                  'Total Rewards', '$totalRewards',
+                  Icons.emoji_events_outlined, AppColors.tokenGold)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatTile(
+                  'Fluent', '$totalFluent',
+                  Icons.check_circle_outline, AppColors.smoothGreen)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatTile(
+                  'Dysfluent', '$totalDysfluent',
+                  Icons.replay_circle_filled_outlined, AppColors.bumpyOrange)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatTile(
+      String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: AppTextStyles.titleMedium
+                      .copyWith(fontWeight: FontWeight.w700),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(label, style: AppTextStyles.labelSmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
