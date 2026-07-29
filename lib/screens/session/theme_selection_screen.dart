@@ -28,7 +28,7 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
 
   String _generateSessionCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final random = Random();
+    final random = Random.secure();
     return String.fromCharCodes(
       Iterable.generate(6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
     );
