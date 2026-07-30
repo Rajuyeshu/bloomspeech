@@ -1,7 +1,10 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/theme/app_colors.dart';
 import '../config/theme/app_text_styles.dart';
+import '../services/video_call_service.dart';
 
 /// Embedded Floating Video Call overlay widget for remote teletherapy.
 ///
@@ -29,13 +32,22 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
   bool _isVideoMuted = false;
   Offset _position = const Offset(16, 80);
 
-  String get _roomUrl =>
-      'https://meet.jit.si/BloomSpeech_${widget.sessionCode.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')}';
-
   Future<void> _openFullVideoCall() async {
-    final uri = Uri.parse(_roomUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final cleanCode = widget.sessionCode.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    final roomName = 'BloomSpeech_$cleanCode';
+
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      // Use native Jitsi Meet conference directly on mobile/emulator
+      await VideoCallService.joinCall(
+        roomName: roomName,
+        displayName: widget.userName + (widget.isClinician ? ' (Clinician)' : ' (Kid)'),
+      );
+    } else {
+      // Use web URL on desktop/browser platforms
+      final uri = Uri.parse('https://meet.jit.si/$roomName');
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     }
   }
 

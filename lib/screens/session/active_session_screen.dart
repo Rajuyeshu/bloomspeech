@@ -745,7 +745,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
           if (_showEmbeddedVideoCall && state.sessionCode != null)
             EmbeddedVideoCallWidget(
               sessionCode: state.sessionCode!,
-              userName: state.config.childName,
+              userName: 'Clinician',
               isClinician: true,
             ),
         ],
