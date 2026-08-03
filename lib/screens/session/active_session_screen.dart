@@ -14,7 +14,6 @@ import '../../services/firestore_service.dart';
 import '../../services/audio_service.dart';
 import '../../models/session.dart';
 import '../../utils/bilingual_phrases.dart';
-import '../../services/video_call_service.dart';
 import '../../widgets/embedded_video_call.dart';
 import '../../widgets/theme_token_board.dart';
 import 'session_setup_screen.dart';
@@ -365,25 +364,6 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     }
   }
 
-  Future<void> _joinVideoCall(String roomId, String childName) async {
-    try {
-      await VideoCallService.joinCall(
-        roomName: roomId,
-        displayName: 'Clinician / SLP',
-        subject: 'BloomSpeech Session: $childName',
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not start video call: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(activeSessionProvider);
@@ -508,7 +488,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                                 ? AppColors.primary
                                 : AppColors.textHint,
                             iconSize: 28,
-                            tooltip: 'Toggle Embedded Video Call Window',
+                            tooltip: 'Toggle Video Call',
                           ),
                         ],
 
@@ -539,7 +519,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
 
                   // ─── Interactive Theme Token Board ───
                   Expanded(
-                    flex: 4,
+                    flex: _showEmbeddedVideoCall ? 3 : 5,
                     child: ThemeTokenBoardWidget(
                       theme: PlayTheme.values.firstWhere(
                         (t) => t.name == state.config.playTheme,
@@ -575,7 +555,26 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
+
+                  // ─── Embedded Video Call (inline, below token board) ───
+                  if (_showEmbeddedVideoCall && state.sessionCode != null)
+                    Expanded(
+                      flex: 3,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: EmbeddedVideoCallWidget(
+                            sessionCode: state.sessionCode!,
+                            userName: 'Clinician',
+                            isClinician: true,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
 
                   // ─── Smooth / Bumpy Buttons ───
                   Padding(
@@ -587,7 +586,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                           child: GestureDetector(
                             onTap: _onSmooth,
                             child: Container(
-                              height: 110,
+                              height: 90,
                               decoration: BoxDecoration(
                                 gradient: AppColors.smoothGradient,
                                 borderRadius: BorderRadius.circular(24),
@@ -606,14 +605,14 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                                   const Icon(
                                     Icons.check_circle_rounded,
                                     color: Colors.white,
-                                    size: 36,
+                                    size: 32,
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 4),
                                   Text(
                                     'Smooth',
                                     style:
                                         AppTextStyles.buttonText.copyWith(
-                                      fontSize: 18,
+                                      fontSize: 16,
                                     ),
                                   ),
                                   Text(
@@ -636,7 +635,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                           child: GestureDetector(
                             onTap: _onBumpy,
                             child: Container(
-                              height: 110,
+                              height: 90,
                               decoration: BoxDecoration(
                                 gradient: AppColors.bumpyGradient,
                                 borderRadius: BorderRadius.circular(24),
@@ -655,14 +654,14 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                                   const Icon(
                                     Icons.replay_circle_filled_rounded,
                                     color: Colors.white,
-                                    size: 36,
+                                    size: 32,
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 4),
                                   Text(
                                     'Bumpy',
                                     style:
                                         AppTextStyles.buttonText.copyWith(
-                                      fontSize: 18,
+                                      fontSize: 16,
                                     ),
                                   ),
                                   Text(
@@ -681,7 +680,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                 ],
               ),
             ),
@@ -740,14 +739,6 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
               ],
             ),
           ),
-
-          // Floating Draggable Video Call Window (Picture-in-Picture)
-          if (_showEmbeddedVideoCall && state.sessionCode != null)
-            EmbeddedVideoCallWidget(
-              sessionCode: state.sessionCode!,
-              userName: 'Clinician',
-              isClinician: true,
-            ),
         ],
       ),
     );

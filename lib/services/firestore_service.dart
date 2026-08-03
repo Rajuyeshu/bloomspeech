@@ -400,6 +400,22 @@ class FirestoreService {
     }
   }
 
+  /// Fetch active session by code (one-shot query — reliable cross-device)
+  Future<ActiveSession?> fetchActiveSession(String sessionCode) async {
+    try {
+      final res = await _supabase
+          .from('active_sessions')
+          .select()
+          .eq('session_code', sessionCode)
+          .maybeSingle();
+      if (res == null) return null;
+      return ActiveSession.fromMap(res);
+    } catch (e) {
+      debugPrint('Supabase fetchActiveSession error: $e');
+      return null;
+    }
+  }
+
   /// Delete active session (cleanup after session ends)
   Future<void> deleteActiveSession(String sessionCode) async {
     try {
