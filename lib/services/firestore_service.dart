@@ -73,6 +73,28 @@ class FirestoreService {
     }
   }
 
+  /// Create a child profile for a registered patient (kid) linked directly to their user ID
+  Future<void> createPatientChildProfile({
+    required String childId,
+    required String name,
+    required String parentName,
+    required String email,
+  }) async {
+    try {
+      await _supabase.from('children').insert({
+        'id': childId,
+        'name': name,
+        'clinician_id': 'patient_self', // Patient is self-managed
+        'current_level': 'word',
+        'enrollment_date': DateTime.now().toIso8601String(),
+        'gender': 'other',
+        'total_sessions': 0,
+      });
+    } catch (e) {
+      debugPrint('Supabase createPatientChildProfile error: $e');
+    }
+  }
+
   /// Update child profile
   Future<void> updateChild({
     required String clinicianId,

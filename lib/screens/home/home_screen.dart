@@ -16,6 +16,9 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
+    if (user?.role == 'kid') {
+      return _buildKidHomeScreen(context, ref, user!);
+    }
 
     return Scaffold(
       body: Container(
@@ -505,5 +508,361 @@ class HomeScreen extends ConsumerWidget {
     if (hour < 12) return 'Good Morning ☀️';
     if (hour < 17) return 'Good Afternoon 🌤️';
     return 'Good Evening 🌙';
+  }
+
+  Widget _buildKidHomeScreen(BuildContext context, WidgetRef ref, AppUser user) {
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFFFF3E0), Color(0xFFFFE0B2), Colors.white],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+
+                // ─── Top Bar ───
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _getGreeting(),
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${user.displayName} 🧒',
+                            style: AppTextStyles.headlineMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => context.goNamed(AppRouter.settings),
+                      icon: const Icon(Icons.settings_rounded),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.7),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ).animate().fadeIn(duration: 600.ms),
+
+                const SizedBox(height: 24),
+
+                // ─── Welcome Header ───
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.accent.withValues(alpha: 0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Text('🌸', style: TextStyle(fontSize: 32)),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Let\'s practice smooth speech!',
+                              style: AppTextStyles.titleMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Practice makes perfect. Have fun with your therapist today! 🪁',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 150.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
+
+                const SizedBox(height: 24),
+
+                // ─── Join Live Session Card ───
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.warmGradient,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.accent.withValues(alpha: 0.35),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.videocam_rounded, color: Colors.white, size: 28),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Live Session',
+                            style: AppTextStyles.titleLarge.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Join a video call and start speech practice with your therapist.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: () => context.goNamed(AppRouter.kidJoin),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                          label: Text(
+                            'Join Your Session',
+                            style: AppTextStyles.buttonText.copyWith(
+                              color: AppColors.accentDark,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppColors.accentDark,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 300.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
+
+                const SizedBox(height: 24),
+
+                // ─── Child Info & Cards ───
+                FutureBuilder<ChildProfile?>(
+                  future: ref.read(firestoreServiceProvider).getChild(
+                        clinicianId: 'patient_self',
+                        childId: user.uid,
+                      ),
+                  builder: (context, snapshot) {
+                    final profile = snapshot.data;
+                    final totalSessions = profile?.totalSessions ?? 0;
+                    final currentLevel = profile?.currentLevel ?? 'Word Level';
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Speech Stats Quick Row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildKidStatCard(
+                                title: 'Completed',
+                                value: '$totalSessions sessions',
+                                icon: Icons.done_all_rounded,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: _buildKidStatCard(
+                                title: 'Active Level',
+                                value: currentLevel,
+                                icon: Icons.stairs_rounded,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          ],
+                        ).animate().fadeIn(delay: 450.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
+
+                        const SizedBox(height: 24),
+
+                        // Action Cards (Progress & History)
+                        _buildKidActionCard(
+                          context,
+                          title: 'My Progress Reports',
+                          subtitle: 'View your speech progress charts and milestones',
+                          icon: Icons.insights_rounded,
+                          color: AppColors.primary,
+                          onTap: () => context.goNamed(
+                            AppRouter.progressDashboard,
+                            pathParameters: {'childId': user.uid},
+                          ),
+                        ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
+
+                        const SizedBox(height: 14),
+
+                        _buildKidActionCard(
+                          context,
+                          title: 'Speech Practice History',
+                          subtitle: 'View stars and feedback from your past sessions',
+                          icon: Icons.history_rounded,
+                          color: AppColors.secondary,
+                          onTap: () => context.goNamed(
+                            AppRouter.sessionHistory,
+                            pathParameters: {'childId': user.uid},
+                          ),
+                        ).animate().fadeIn(delay: 750.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
+                      ],
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKidStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: AppTextStyles.titleMedium.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKidActionCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTextStyles.titleMedium.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textHint.withValues(alpha: 0.7), size: 16),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -7,11 +7,13 @@ class AppUser {
   final String uid;
   final String? email;
   final String? displayName;
+  final String role; // 'clinician' or 'kid'
 
   AppUser({
     required this.uid,
     this.email,
     this.displayName,
+    required this.role,
   });
 
   AppUser? get user => this;
@@ -25,10 +27,16 @@ class AuthService {
   AppUser? get currentUser {
     final sUser = _supabase.auth.currentUser;
     if (sUser != null) {
+      final email = sUser.email;
+      final role = sUser.userMetadata?['role'] as String? ??
+          (email != null && email.endsWith('@patient.bloomspeech.app')
+              ? 'kid'
+              : 'clinician');
       return AppUser(
         uid: sUser.id,
         email: sUser.email,
         displayName: sUser.userMetadata?['display_name'] as String? ?? sUser.email?.split('@').first,
+        role: role,
       );
     }
     return null;
@@ -39,10 +47,16 @@ class AuthService {
     return _supabase.auth.onAuthStateChange.map((data) {
       final sUser = data.session?.user;
       if (sUser != null) {
+        final email = sUser.email;
+        final role = sUser.userMetadata?['role'] as String? ??
+            (email != null && email.endsWith('@patient.bloomspeech.app')
+                ? 'kid'
+                : 'clinician');
         return AppUser(
           uid: sUser.id,
           email: sUser.email,
           displayName: sUser.userMetadata?['display_name'] as String? ?? sUser.email?.split('@').first,
+          role: role,
         );
       }
       return null;
@@ -60,10 +74,13 @@ class AuthService {
     );
     final u = response.user;
     if (u == null) throw 'Login failed: user not found';
+    final role = u.userMetadata?['role'] as String? ??
+        (email.endsWith('@patient.bloomspeech.app') ? 'kid' : 'clinician');
     return AppUser(
       uid: u.id,
       email: u.email,
       displayName: u.userMetadata?['display_name'] as String? ?? u.email?.split('@').first,
+      role: role,
     );
   }
 
@@ -72,11 +89,15 @@ class AuthService {
     required String email,
     required String password,
     required String displayName,
+    String role = 'clinician',
   }) async {
     final response = await _supabase.auth.signUp(
       email: email,
       password: password,
-      data: {'display_name': displayName},
+      data: {
+        'display_name': displayName,
+        'role': role,
+      },
     );
     final u = response.user;
     if (u != null) {
@@ -86,6 +107,7 @@ class AuthService {
           'id': u.id,
           'name': displayName,
           'email': email,
+          'role': role,
         });
       } catch (dbErr) {
         debugPrint('Profiles table sync info: $dbErr');
@@ -94,6 +116,7 @@ class AuthService {
         uid: u.id,
         email: u.email,
         displayName: displayName,
+        role: role,
       );
     }
     throw 'Registration error';

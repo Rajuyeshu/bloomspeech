@@ -8,6 +8,7 @@ import '../../config/routes/app_router.dart';
 import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/language_service.dart';
+import '../../services/firestore_service.dart';
 import '../../utils/app_localizations.dart';
 
 /// Landing screen — choose Clinician or Kid/Patient login
@@ -1062,11 +1063,21 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
     try {
       final email = _regEmailController.text.trim();
 
-      await ref.read(authServiceProvider).registerWithEmail(
+      final user = await ref.read(authServiceProvider).registerWithEmail(
             email: email,
             password: _regPasswordController.text,
             displayName: _regChildNameController.text.trim(),
+            role: 'kid',
           );
+
+      // Create a child profile for this patient linked directly to their user ID
+      await ref.read(firestoreServiceProvider).createPatientChildProfile(
+            childId: user.uid,
+            name: _regChildNameController.text.trim(),
+            parentName: _regParentNameController.text.trim(),
+            email: email,
+          );
+
       if (mounted) context.goNamed(AppRouter.home);
     } catch (e) {
       if (mounted) {
