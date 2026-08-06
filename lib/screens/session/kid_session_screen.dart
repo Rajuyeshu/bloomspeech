@@ -10,6 +10,8 @@ import '../../services/firestore_service.dart';
 import '../../services/audio_service.dart';
 import '../../models/session.dart';
 import '../../utils/bilingual_phrases.dart';
+import 'package:go_router/go_router.dart';
+import '../../config/routes/app_router.dart';
 import '../../widgets/embedded_video_call.dart';
 import '../../widgets/theme_token_board.dart';
 
@@ -90,6 +92,35 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
           _hasError = true;
         });
       }
+    }
+  }
+
+  Future<void> _onBack() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Exit Session?'),
+        content: const Text(
+          'Are you sure you want to leave this therapy session?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+            ),
+            child: const Text('Exit'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      context.goNamed(AppRouter.home);
     }
   }
 
@@ -190,8 +221,14 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
 
     final session = _session!;
 
-    return Scaffold(
-      body: Container(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        await _onBack();
+      },
+      child: Scaffold(
+        body: Container(
         width: double.infinity,
         height: double.infinity,
         decoration: BoxDecoration(
@@ -398,6 +435,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
           ),
         ),
       ),
+    ),
     );
   }
 

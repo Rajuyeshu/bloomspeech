@@ -364,6 +364,17 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     }
   }
 
+  String _shortenLevel(String level) {
+    switch (level) {
+      case 'word': return 'Word';
+      case 'sentence': return 'Sentence';
+      case 'continuousSpeech': return 'Continuous';
+      case 'narrative': return 'Narrative';
+      case 'conversational': return 'Conversation';
+      default: return level;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(activeSessionProvider);
@@ -373,138 +384,153 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
       );
     }
 
-    final progress = state.config.tokenGoal > 0
-        ? state.currentTokens / state.config.tokenGoal
-        : 0.0;
+    final screenWidth = MediaQuery.of(context).size.width;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Main content
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFF8F6FF), Colors.white],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        await _endSession();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Main content
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFF8F6FF), Colors.white],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // ─── Top Bar ───
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        // Level Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.stairs_rounded,
-                                  size: 16, color: AppColors.primary),
-                              const SizedBox(width: 4),
-                              Text(
-                                state.config.therapyLevel,
-                                style: AppTextStyles.labelMedium.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        if (state.sessionCode != null) ...[
-                          const SizedBox(width: 8),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // ─── Top Bar ───
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          // Level Badge
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenWidth < 400 ? 8 : 12,
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.secondary.withValues(alpha: 0.1),
+                              color: AppColors.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text(
-                              'Code: ${state.sessionCode}',
-                              style: AppTextStyles.labelMedium.copyWith(
-                                color: AppColors.secondary,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.stairs_rounded,
+                                    size: 14, color: AppColors.primary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _shortenLevel(state.config.therapyLevel),
+                                  style: AppTextStyles.labelMedium.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: screenWidth < 400 ? 11 : 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-
-                        const Spacer(),
-
-                        // Timer
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceVariant,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.timer_outlined,
-                                  size: 16, color: AppColors.textSecondary),
-                              const SizedBox(width: 4),
-                              Text(
-                                _formatDuration(_elapsedTime),
-                                style: AppTextStyles.labelMedium,
+  
+                          if (state.sessionCode != null) ...[
+                            SizedBox(width: screenWidth < 400 ? 4 : 8),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: screenWidth < 400 ? 8 : 10,
+                                vertical: 6,
                               ),
-                            ],
+                              decoration: BoxDecoration(
+                                color: AppColors.secondary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                screenWidth < 400
+                                    ? '#${state.sessionCode}'
+                                    : 'Code: ${state.sessionCode}',
+                                style: AppTextStyles.labelMedium.copyWith(
+                                  color: AppColors.secondary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: screenWidth < 400 ? 11 : 12,
+                                ),
+                              ),
+                            ),
+                          ],
+  
+                          const Spacer(),
+  
+                          // Timer
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenWidth < 400 ? 8 : 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceVariant,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.timer_outlined,
+                                    size: screenWidth < 400 ? 12 : 16,
+                                    color: AppColors.textSecondary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatDuration(_elapsedTime),
+                                  style: AppTextStyles.labelMedium.copyWith(
+                                    fontSize: screenWidth < 400 ? 11 : 12,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-
-                        if (state.sessionCode != null) ...[
-                          const SizedBox(width: 8),
+  
+                          if (state.sessionCode != null) ...[
+                            SizedBox(width: screenWidth < 400 ? 2 : 8),
+                            IconButton(
+                              onPressed: () => setState(
+                                  () => _showEmbeddedVideoCall = !_showEmbeddedVideoCall),
+                              icon: Icon(_showEmbeddedVideoCall
+                                  ? Icons.videocam_rounded
+                                  : Icons.videocam_outlined),
+                              color: _showEmbeddedVideoCall
+                                  ? AppColors.primary
+                                  : AppColors.textHint,
+                              iconSize: screenWidth < 400 ? 22 : 28,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              tooltip: 'Toggle Video Call',
+                            ),
+                          ],
+  
+                          SizedBox(width: screenWidth < 400 ? 6 : 8),
+  
+                          // End Session
                           IconButton(
-                            onPressed: () => setState(
-                                () => _showEmbeddedVideoCall = !_showEmbeddedVideoCall),
-                            icon: Icon(_showEmbeddedVideoCall
-                                ? Icons.videocam_rounded
-                                : Icons.videocam_outlined),
-                            color: _showEmbeddedVideoCall
-                                ? AppColors.primary
-                                : AppColors.textHint,
-                            iconSize: 28,
-                            tooltip: 'Toggle Video Call',
+                            onPressed: _endSession,
+                            icon: const Icon(Icons.stop_circle_outlined),
+                            color: AppColors.secondary,
+                            iconSize: screenWidth < 400 ? 24 : 28,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'End Session',
                           ),
                         ],
-
-                        const SizedBox(width: 8),
-
-                        // End Session
-                        IconButton(
-                          onPressed: _endSession,
-                          icon: const Icon(Icons.stop_circle_outlined),
-                          color: AppColors.secondary,
-                          iconSize: 28,
-                          tooltip: 'End Session',
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
 
                   // ─── Child Info ───
                   Padding(
@@ -739,6 +765,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
           ),
         ],
       ),
+    ),
     );
   }
 
