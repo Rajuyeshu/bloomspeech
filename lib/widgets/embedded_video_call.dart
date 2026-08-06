@@ -43,7 +43,8 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
 
   String get _jitsiUrl {
     final encoded = Uri.encodeComponent(_displayName);
-    return 'https://meet.ffmuc.net/$_roomName#userInfo.displayName="$encoded"&config.startWithAudioMuted=${_isAudioMuted}&config.prejoinPageEnabled=false';
+    final domain = kIsWeb ? 'meet.jit.si' : 'meet.ffmuc.net';
+    return 'https://$domain/$_roomName#userInfo.displayName="$encoded"&config.startWithAudioMuted=${_isAudioMuted}&config.prejoinPageEnabled=false';
   }
 
   Future<void> _startCall() async {
