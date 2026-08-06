@@ -28,7 +28,13 @@ class ProgressDashboard extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Progress Dashboard'),
         leading: IconButton(
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.goNamed(AppRouter.home);
+            }
+          },
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
         ),
         actions: [

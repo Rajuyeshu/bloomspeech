@@ -96,7 +96,13 @@ class _KidJoinScreenState extends ConsumerState<KidJoinScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    onPressed: () => context.goNamed(AppRouter.login),
+                    onPressed: () {
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.goNamed(AppRouter.home);
+                      }
+                    },
                     icon: const Icon(Icons.arrow_back_ios_new_rounded),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.7),
@@ -114,20 +120,21 @@ class _KidJoinScreenState extends ConsumerState<KidJoinScreen> {
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    gradient: AppColors.warmGradient,
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(28),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.accent.withValues(alpha: 0.4),
+                        color: AppColors.accent.withValues(alpha: 0.2),
                         blurRadius: 24,
                         offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.child_care_rounded,
-                    size: 50,
-                    color: Colors.white,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.asset(
+                      'assets/images/app_logo.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 )
                     .animate()
