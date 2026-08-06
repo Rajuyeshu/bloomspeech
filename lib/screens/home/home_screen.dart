@@ -119,11 +119,7 @@ class HomeScreen extends ConsumerWidget {
                         height: 48,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            // If a child exists, go to session setup directly for that child
-                            context.goNamed(
-                              AppRouter.sessionSetup,
-                              pathParameters: {'childId': 'aarav_01'},
-                            );
+                            context.goNamed(AppRouter.children);
                           },
                           icon: const Icon(Icons.play_arrow_rounded, size: 22),
                           label: const Text('Start New Session'),

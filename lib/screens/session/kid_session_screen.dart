@@ -312,16 +312,15 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                   // Embedded Jitsi Video Call (below the token board)
                   if (_showEmbeddedVideoCall) ...[
                     const SizedBox(height: 12),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: EmbeddedVideoCallWidget(
-                            sessionCode: widget.sessionCode,
-                            userName: session.childName,
-                            isClinician: false,
-                          ),
+                    Container(
+                      height: MediaQuery.of(context).size.height < 750 ? 160 : 260,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: EmbeddedVideoCallWidget(
+                          sessionCode: widget.sessionCode,
+                          userName: session.childName,
+                          isClinician: false,
                         ),
                       ),
                     ),

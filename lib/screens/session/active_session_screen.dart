@@ -559,17 +559,15 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
 
                   // ─── Embedded Video Call (inline, below token board) ───
                   if (_showEmbeddedVideoCall && state.sessionCode != null)
-                    Expanded(
-                      flex: 3,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: EmbeddedVideoCallWidget(
-                            sessionCode: state.sessionCode!,
-                            userName: 'Clinician',
-                            isClinician: true,
-                          ),
+                    Container(
+                      height: MediaQuery.of(context).size.height < 750 ? 160 : 260,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: EmbeddedVideoCallWidget(
+                          sessionCode: state.sessionCode!,
+                          userName: 'Clinician',
+                          isClinician: true,
                         ),
                       ),
                     ),

@@ -46,12 +46,13 @@ class _ThemeTokenBoardWidgetState extends State<ThemeTokenBoardWidget>
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
         return Container(
           width: double.infinity,
-          constraints: const BoxConstraints(maxHeight: 380),
+          constraints: BoxConstraints(maxHeight: screenHeight < 750 ? 240 : 380),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.all(16),
           decoration: _getThemeBackgroundDecoration(widget.theme),
@@ -80,134 +81,134 @@ class _ThemeTokenBoardWidgetState extends State<ThemeTokenBoardWidget>
     );
   }
 
-  /// Theme-specific background card styling
+  /// Theme-specific background card styling (Light and clean pastels)
   BoxDecoration _getThemeBackgroundDecoration(PlayTheme theme) {
     switch (theme) {
       case PlayTheme.diyaFestival:
         return BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF2C1930), Color(0xFF1E1022)],
+            colors: [Color(0xFFFFFDF5), Color(0xFFFFF5E0)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFF9800).withValues(alpha: 0.3),
-              blurRadius: 20,
-              spreadRadius: 2,
+              color: const Color(0xFFFF9800).withValues(alpha: 0.1),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
-          border: Border.all(color: const Color(0xFFFFD700), width: 2),
+          border: Border.all(color: const Color(0xFFFFCC80), width: 1.5),
         );
       case PlayTheme.rangoliBuilder:
         return BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF2D0B33), Color(0xFF16031C)],
+            colors: [Color(0xFFFFF0F5), Color(0xFFFFE4E1)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE91E63).withValues(alpha: 0.3),
-              blurRadius: 20,
-              spreadRadius: 2,
+              color: const Color(0xFFE91E63).withValues(alpha: 0.1),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
-          border: Border.all(color: const Color(0xFFFF4081), width: 2),
+          border: Border.all(color: const Color(0xFFF8BBD0), width: 1.5),
         );
       case PlayTheme.mangoHarvest:
         return BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF0F3818), Color(0xFF061A0A)],
+            colors: [Color(0xFFF1F8E9), Color(0xFFE8F5E9)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
-              blurRadius: 20,
-              spreadRadius: 2,
+              color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
-          border: Border.all(color: const Color(0xFF81C784), width: 2),
+          border: Border.all(color: const Color(0xFFC8E6C9), width: 1.5),
         );
       case PlayTheme.peacockGarden:
         return BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF0A2239), Color(0xFF04101D)],
+            colors: [Color(0xFFE0F7FA), Color(0xFFE0F2F1)],
             begin: Alignment.topRight,
             end: Alignment.bottomLeft,
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF00BCD4).withValues(alpha: 0.3),
-              blurRadius: 20,
-              spreadRadius: 2,
+              color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
-          border: Border.all(color: const Color(0xFF00E5FF), width: 2),
+          border: Border.all(color: const Color(0xFFB2EBF2), width: 1.5),
         );
       case PlayTheme.lotusPond:
         return BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF06283D), Color(0xFF02121D)],
+            colors: [Color(0xFFE0F2F1), Color(0xFFE8F5E9)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF00B4D8).withValues(alpha: 0.3),
-              blurRadius: 20,
-              spreadRadius: 2,
+              color: const Color(0xFF00B4D8).withValues(alpha: 0.1),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
-          border: Border.all(color: const Color(0xFF90E0EF), width: 2),
+          border: Border.all(color: const Color(0xFFB2DFDB), width: 1.5),
         );
       case PlayTheme.kiteFestival:
         return BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF1F2B5B), Color(0xFF0D1433)],
+            colors: [Color(0xFFE8EAF6), Color(0xFFE1F5FE)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF7C4DFF).withValues(alpha: 0.3),
-              blurRadius: 20,
-              spreadRadius: 2,
+              color: const Color(0xFF7C4DFF).withValues(alpha: 0.1),
+              blurRadius: 16,
+              spreadRadius: 1,
             ),
           ],
-          border: Border.all(color: const Color(0xFFB388FF), width: 2),
+          border: Border.all(color: const Color(0xFFC5CAE9), width: 1.5),
         );
     }
   }
 
-  /// Theme Title Badge
+  /// Theme Title Badge (Light and clean design)
   Widget _buildThemeBadge(PlayTheme theme, int current, int goal) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(theme.emoji, style: const TextStyle(fontSize: 22)),
+          Text(theme.emoji, style: const TextStyle(fontSize: 20)),
           const SizedBox(width: 8),
           Text(
             theme.displayName,
             style: const TextStyle(
-              color: Colors.white,
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 15,
             ),
           ),
           const SizedBox(width: 12),
@@ -222,7 +223,7 @@ class _ThemeTokenBoardWidgetState extends State<ThemeTokenBoardWidget>
               style: const TextStyle(
                 color: Colors.black87,
                 fontWeight: FontWeight.w900,
-                fontSize: 14,
+                fontSize: 13,
               ),
             ),
           ),
