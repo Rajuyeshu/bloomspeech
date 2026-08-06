@@ -350,7 +350,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                   if (_showEmbeddedVideoCall) ...[
                     const SizedBox(height: 12),
                     Container(
-                      height: MediaQuery.of(context).size.height < 750 ? 160 : 260,
+                      height: MediaQuery.of(context).size.height < 750 ? 150 : 200,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(18),

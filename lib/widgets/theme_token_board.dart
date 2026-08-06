@@ -52,7 +52,7 @@ class _ThemeTokenBoardWidgetState extends State<ThemeTokenBoardWidget>
       builder: (context, child) {
         return Container(
           width: double.infinity,
-          constraints: BoxConstraints(maxHeight: screenHeight < 750 ? 240 : 380),
+          constraints: BoxConstraints(maxHeight: screenHeight < 750 ? 220 : 300),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.all(16),
           decoration: _getThemeBackgroundDecoration(widget.theme),
