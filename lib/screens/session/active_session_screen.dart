@@ -108,23 +108,58 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     );
 
     // Initialize session state
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final config = ref.read(sessionConfigProvider);
       final currentSessionState = ref.read(activeSessionProvider);
+      final user = ref.read(currentUserProvider);
 
       if (currentSessionState != null) {
         if (currentSessionState.sessionCode == null) {
+          final code = _generateSessionCode();
           ref.read(activeSessionProvider.notifier).state =
               currentSessionState.copyWith(
-            sessionCode: _generateSessionCode(),
+            sessionCode: code,
           );
+          // Save fallback to Supabase
+          if (user != null) {
+            final activeSession = ActiveSession(
+              sessionCode: code,
+              clinicianId: user.uid,
+              childId: currentSessionState.config.childId,
+              childName: currentSessionState.config.childName,
+              tokenGoal: currentSessionState.config.tokenGoal,
+              therapyLevel: currentSessionState.config.therapyLevel,
+              playTheme: currentSessionState.config.playTheme,
+              miniGame: currentSessionState.config.miniGame,
+              tokensPerFluent: currentSessionState.config.tokensPerFluent,
+              tokensPerDysfluent: currentSessionState.config.tokensPerDysfluent,
+            );
+            await ref.read(firestoreServiceProvider).createActiveSession(activeSession);
+          }
         }
       } else if (config != null) {
+        final code = _generateSessionCode();
         ref.read(activeSessionProvider.notifier).state = ActiveSessionState(
           config: config,
-          sessionCode: _generateSessionCode(),
+          sessionCode: code,
           startTime: DateTime.now(),
         );
+        // Save fallback to Supabase
+        if (user != null) {
+          final activeSession = ActiveSession(
+            sessionCode: code,
+            clinicianId: user.uid,
+            childId: config.childId,
+            childName: config.childName,
+            tokenGoal: config.tokenGoal,
+            therapyLevel: config.therapyLevel,
+            playTheme: config.playTheme,
+            miniGame: config.miniGame,
+            tokensPerFluent: config.tokensPerFluent,
+            tokensPerDysfluent: config.tokensPerDysfluent,
+          );
+          await ref.read(firestoreServiceProvider).createActiveSession(activeSession);
+        }
       }
     });
 

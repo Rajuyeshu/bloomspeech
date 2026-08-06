@@ -12,6 +12,7 @@ import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/session.dart';
 import 'session_setup_screen.dart';
+import 'active_session_screen.dart';
 
 /// Theme selection screen — clinician or child picks a play theme
 class ThemeSelectionScreen extends ConsumerStatefulWidget {
@@ -44,8 +45,9 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
 
       final user = ref.read(currentUserProvider);
       if (user != null) {
+        final code = _generateSessionCode();
         final activeSession = ActiveSession(
-          sessionCode: _generateSessionCode(),
+          sessionCode: code,
           clinicianId: user.uid,
           childId: updatedConfig.childId,
           childName: updatedConfig.childName,
@@ -57,6 +59,13 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
           tokensPerDysfluent: updatedConfig.tokensPerDysfluent,
         );
         await ref.read(firestoreServiceProvider).createActiveSession(activeSession);
+
+        // Crucial: Set the active session state with the EXACT same code!
+        ref.read(activeSessionProvider.notifier).state = ActiveSessionState(
+          config: updatedConfig,
+          sessionCode: code,
+          startTime: DateTime.now(),
+        );
       }
       if (mounted) {
         context.goNamed(AppRouter.activeSession);
