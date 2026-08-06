@@ -43,7 +43,7 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
 
   String get _jitsiUrl {
     final encoded = Uri.encodeComponent(_displayName);
-    return 'https://meet.jit.si/$_roomName#userInfo.displayName="$encoded"&config.startWithAudioMuted=${_isAudioMuted}&config.prejoinPageEnabled=false';
+    return 'https://meet.ffmuc.net/$_roomName#userInfo.displayName="$encoded"&config.startWithAudioMuted=${_isAudioMuted}&config.prejoinPageEnabled=false';
   }
 
   Future<void> _startCall() async {
@@ -61,7 +61,7 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
       setState(() => _isCallActive = true);
     } else {
       // Desktop fallback — open in browser
-      final uri = Uri.parse('https://meet.jit.si/$_roomName');
+      final uri = Uri.parse('https://meet.ffmuc.net/$_roomName');
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }

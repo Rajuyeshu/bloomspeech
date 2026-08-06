@@ -21,7 +21,7 @@ class VideoCallService {
   }) async {
     // Sanitize room name (Jitsi rooms are alphanumeric, no spaces/special characters)
     final sanitizedRoom = roomName.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
-    final serverUrl = 'https://meet.jit.si/$sanitizedRoom';
+    final serverUrl = 'https://meet.ffmuc.net/$sanitizedRoom';
 
     debugPrint('Joining video call room: $sanitizedRoom (Platform: ${defaultTargetPlatform.name})');
 
@@ -42,6 +42,7 @@ class VideoCallService {
     // On iOS & Android, use the native Jitsi Meet SDK
     try {
       final options = JitsiMeetConferenceOptions(
+        serverURL: 'https://meet.ffmuc.net',
         room: sanitizedRoom,
         configOverrides: {
           'startWithAudioMuted': isAudioMuted,
