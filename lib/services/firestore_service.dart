@@ -365,6 +365,9 @@ class FirestoreService {
         'mini_game': session.miniGame,
         'language': session.language,
         'reward_cycles_completed': session.rewardCyclesCompleted,
+        'reward_active': false,
+        'mini_game_active': false,
+        'status': 'active',
         'updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
@@ -395,6 +398,15 @@ class FirestoreService {
       }
       if (data.containsKey('rewardCyclesCompleted')) {
         updateMap['reward_cycles_completed'] = data['rewardCyclesCompleted'];
+      }
+      if (data.containsKey('rewardActive')) {
+        updateMap['reward_active'] = data['rewardActive'];
+      }
+      if (data.containsKey('miniGameActive')) {
+        updateMap['mini_game_active'] = data['miniGameActive'];
+      }
+      if (data.containsKey('status')) {
+        updateMap['status'] = data['status'];
       }
 
       await _supabase

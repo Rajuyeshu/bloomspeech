@@ -35,6 +35,9 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
   String _feedbackEmoji = '';
   String _feedbackText = '';
   Timer? _pollTimer;
+  int _lastRewardCycles = 0;
+  bool _isOnRewardScreen = false;
+  bool _sessionEnded = false;
 
   @override
   void initState() {
@@ -61,6 +64,29 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
       if (!mounted) return;
 
       if (session != null) {
+        // Detect session ended by clinician
+        if (session.status == SessionStatus.completed && !_sessionEnded) {
+          _sessionEnded = true;
+          _pollTimer?.cancel();
+          _showSessionEndedDialog();
+          return;
+        }
+
+        // Detect reward triggered by clinician (reward_active becomes true)
+        if (session.rewardActive && !_isOnRewardScreen) {
+          _isOnRewardScreen = true;
+          _lastRewardCycles = session.rewardCyclesCompleted;
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (mounted) {
+              await context.pushNamed(AppRouter.reward);
+              // Kid returned from reward screen
+              if (mounted) {
+                setState(() => _isOnRewardScreen = false);
+              }
+            }
+          });
+        }
+
         // Detect feedback changes from clinician taps
         if (session.lastFeedbackType != null &&
             session.lastFeedbackType != _lastFeedbackType) {
@@ -93,6 +119,62 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
         });
       }
     }
+  }
+
+  void _showSessionEndedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Text('🎉', style: TextStyle(fontSize: 28)),
+            const SizedBox(width: 12),
+            Text('Session Complete!',
+                style: AppTextStyles.titleLarge
+                    .copyWith(color: AppColors.primary)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Great job! Your clinician has ended the session.',
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            if (_session != null && _session!.rewardCyclesCompleted > 0) ...[
+              const SizedBox(height: 12),
+              Text(
+                '🏆 You earned ${_session!.rewardCyclesCompleted} reward${_session!.rewardCyclesCompleted > 1 ? 's' : ''}!',
+                style: AppTextStyles.titleMedium
+                    .copyWith(color: AppColors.accentDark),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.goNamed(AppRouter.home);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Done! 🌟'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _onBack() async {

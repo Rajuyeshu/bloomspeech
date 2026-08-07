@@ -90,9 +90,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isSplash = state.matchedLocation == AppRouter.splashPath;
       final isKidJoin = state.matchedLocation == AppRouter.kidJoinPath;
       final isKidSession = state.matchedLocation.startsWith('/session/kid/');
+      final isRewardRoute = state.matchedLocation.startsWith('/reward');
 
-      // Allow kid join and active session regardless of auth
-      if (isKidJoin || isKidSession) return null;
+      // Allow kid join, active session, and reward screens regardless of auth
+      if (isKidJoin || isKidSession || isRewardRoute) return null;
 
       // Still loading auth state — stay on splash
       if (isLoading && isSplash) return null;

@@ -295,10 +295,37 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
   }
 
   void _showRewardScreen() {
+    // Signal reward active to kid's device via Supabase
+    final state = ref.read(activeSessionProvider);
+    if (state?.sessionCode != null) {
+      ref.read(firestoreServiceProvider).updateActiveSession(
+        sessionCode: state!.sessionCode!,
+        data: {
+          'rewardActive': true,
+          'miniGameActive': true,
+          'currentTokenCount': 0,
+          'rewardCyclesCompleted': state.rewardCycles,
+        },
+      );
+    }
+
     // Navigate to reward screen after a brief delay
-    Future.delayed(const Duration(milliseconds: 500), () {
+    Future.delayed(const Duration(milliseconds: 500), () async {
       if (mounted) {
-        context.pushNamed(AppRouter.reward);
+        await context.pushNamed(AppRouter.reward);
+        // After clinician returns from reward screen, reset the flags
+        final currentState = ref.read(activeSessionProvider);
+        if (currentState?.sessionCode != null) {
+          ref.read(activeSessionProvider.notifier).state =
+              currentState!.copyWith(showingReward: false);
+          ref.read(firestoreServiceProvider).updateActiveSession(
+            sessionCode: currentState.sessionCode!,
+            data: {
+              'rewardActive': false,
+              'miniGameActive': false,
+            },
+          );
+        }
       }
     });
   }
@@ -343,6 +370,14 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     );
 
     if (confirmed == true) {
+      // Signal session completed to kid's device
+      final state = ref.read(activeSessionProvider);
+      if (state?.sessionCode != null) {
+        await ref.read(firestoreServiceProvider).updateActiveSession(
+          sessionCode: state!.sessionCode!,
+          data: {'status': 'completed'},
+        );
+      }
       await _saveSession();
       if (mounted) {
         context.goNamed(AppRouter.sessionSummary);
