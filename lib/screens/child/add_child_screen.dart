@@ -161,7 +161,13 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Child' : 'Add New Child'),
         leading: IconButton(
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.goNamed(AppRouter.home);
+            }
+          },
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
         ),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,7 +21,37 @@ class HomeScreen extends ConsumerWidget {
       return _buildKidHomeScreen(context, ref, user!);
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Exit App?'),
+            content: const Text('Are you sure you want to exit BloomSpeech?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                ),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        if (shouldExit == true) {
+          // Home is the only route on the stack, so `Navigator.pop` is a no-op
+          // here — ask the platform to close the app instead.
+          await SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -64,7 +95,7 @@ class HomeScreen extends ConsumerWidget {
 
                     // Settings
                     IconButton(
-                      onPressed: () => context.goNamed(AppRouter.settings),
+                      onPressed: () => context.pushNamed(AppRouter.settings),
                       icon: const Icon(Icons.settings_rounded),
                       style: IconButton.styleFrom(
                         backgroundColor: AppColors.surfaceVariant,
@@ -119,7 +150,7 @@ class HomeScreen extends ConsumerWidget {
                         height: 48,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            context.goNamed(AppRouter.children);
+                            context.pushNamed(AppRouter.children);
                           },
                           icon: const Icon(Icons.play_arrow_rounded, size: 22),
                           label: const Text('Start New Session'),
@@ -153,7 +184,7 @@ class HomeScreen extends ConsumerWidget {
                         iconBg: AppColors.surfaceVariant,
                         label: 'My Children',
                         subtitle: 'Manage profiles',
-                        onTap: () => context.goNamed(AppRouter.children),
+                        onTap: () => context.pushNamed(AppRouter.children),
                         delay: 300,
                       ),
                     ),
@@ -166,7 +197,7 @@ class HomeScreen extends ConsumerWidget {
                         iconBg: AppColors.accentLight.withValues(alpha: 0.3),
                         label: 'History',
                         subtitle: 'Past sessions',
-                        onTap: () => context.goNamed(AppRouter.children),
+                        onTap: () => context.pushNamed(AppRouter.children),
                         delay: 400,
                       ),
                     ),
@@ -184,7 +215,7 @@ class HomeScreen extends ConsumerWidget {
                       style: AppTextStyles.headlineSmall,
                     ),
                     TextButton(
-                      onPressed: () => context.goNamed(AppRouter.children),
+                      onPressed: () => context.pushNamed(AppRouter.children),
                       child: Text(
                         'View All',
                         style: AppTextStyles.labelMedium.copyWith(
@@ -261,6 +292,7 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -328,8 +360,8 @@ class HomeScreen extends ConsumerWidget {
       );
     }
 
-    return StreamBuilder(
-      stream: ref.read(firestoreServiceProvider).getChildren(clinicianId),
+    return FutureBuilder<List<ChildProfile>>(
+      future: ref.read(firestoreServiceProvider).fetchChildren(clinicianId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -377,7 +409,7 @@ class HomeScreen extends ConsumerWidget {
     final color = colors[index % colors.length];
 
     return GestureDetector(
-      onTap: () => context.goNamed(
+      onTap: () => context.pushNamed(
         AppRouter.childProfile,
         pathParameters: {'childId': child.id},
       ),
@@ -431,7 +463,7 @@ class HomeScreen extends ConsumerWidget {
 
             // Play Button / Arrow
             IconButton(
-              onPressed: () => context.goNamed(
+              onPressed: () => context.pushNamed(
                 AppRouter.sessionSetup,
                 pathParameters: {'childId': child.id},
               ),
@@ -486,7 +518,7 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: () => context.goNamed(AppRouter.addChild),
+            onPressed: () => context.pushNamed(AppRouter.addChild),
             icon: const Icon(Icons.add_rounded, size: 20),
             label: const Text('Add Child'),
             style: ElevatedButton.styleFrom(
@@ -507,7 +539,35 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildKidHomeScreen(BuildContext context, WidgetRef ref, AppUser user) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Exit App?'),
+            content: const Text('Are you sure you want to exit BloomSpeech?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.secondary,
+                ),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        if (shouldExit == true && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -548,7 +608,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ),
                     IconButton(
-                      onPressed: () => context.goNamed(AppRouter.settings),
+                      onPressed: () => context.pushNamed(AppRouter.settings),
                       icon: const Icon(Icons.settings_rounded),
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.7),
@@ -657,7 +717,7 @@ class HomeScreen extends ConsumerWidget {
                         width: double.infinity,
                         height: 52,
                         child: ElevatedButton.icon(
-                          onPressed: () => context.goNamed(AppRouter.kidJoin),
+                          onPressed: () => context.pushNamed(AppRouter.kidJoin),
                           icon: const Icon(Icons.play_arrow_rounded, size: 24),
                           label: Text(
                             'Join Your Session',
@@ -684,14 +744,20 @@ class HomeScreen extends ConsumerWidget {
 
                 // ─── Child Info & Cards ───
                 FutureBuilder<ChildProfile?>(
-                  future: ref.read(firestoreServiceProvider).getChild(
-                        clinicianId: 'patient_self',
-                        childId: user.uid,
-                      ),
+                  // Resolve the clinician's child record this kid is linked
+                  // to — that is where their sessions are actually recorded.
+                  // Keyed on the refresh counter so finishing a session
+                  // re-queries rather than showing the old count.
+                  key: ValueKey(ref.watch(dataRefreshProvider)),
+                  future:
+                      ref.read(firestoreServiceProvider).getChildForKid(user.uid),
                   builder: (context, snapshot) {
                     final profile = snapshot.data;
                     final totalSessions = profile?.totalSessions ?? 0;
                     final currentLevel = profile?.currentLevel ?? 'Word Level';
+                    // Progress/history must query the linked child id, not the
+                    // kid's auth uid, or they come back empty.
+                    final progressChildId = profile?.id ?? user.uid;
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -728,9 +794,9 @@ class HomeScreen extends ConsumerWidget {
                           subtitle: 'View your speech progress charts and milestones',
                           icon: Icons.insights_rounded,
                           color: AppColors.primary,
-                          onTap: () => context.goNamed(
+                          onTap: () => context.pushNamed(
                             AppRouter.progressDashboard,
-                            pathParameters: {'childId': user.uid},
+                            pathParameters: {'childId': progressChildId},
                           ),
                         ).animate().fadeIn(delay: 600.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
 
@@ -742,9 +808,9 @@ class HomeScreen extends ConsumerWidget {
                           subtitle: 'View stars and feedback from your past sessions',
                           icon: Icons.history_rounded,
                           color: AppColors.secondary,
-                          onTap: () => context.goNamed(
+                          onTap: () => context.pushNamed(
                             AppRouter.sessionHistory,
-                            pathParameters: {'childId': user.uid},
+                            pathParameters: {'childId': progressChildId},
                           ),
                         ).animate().fadeIn(delay: 750.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
                       ],
@@ -758,6 +824,7 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     );
   }
 

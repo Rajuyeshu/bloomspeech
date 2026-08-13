@@ -34,6 +34,32 @@ class AppConstants {
   // ─── Session Code Length ───
   static const int sessionCodeLength = 6;
 
+  // ─── Video Call (Jitsi) ───
+  // MUST be identical on every platform. Web and mobile once pointed at
+  // different servers, which put the clinician and the kid in two separate
+  // conferences (no remote video, no remote audio).
+  //
+  // Host choice is constrained by two independent server policies:
+  //
+  //   meet.jit.si     — embeds in an iframe, but its config.js sets
+  //                     `anonymousdomain` + `tokenAuthUrl`, so the first
+  //                     participant must sign in and everyone else is held at
+  //                     "waiting for a moderator". Unusable for anonymous kids.
+  //   meet.ffmuc.net  — no authdomain and no lobby, so anyone can open a room,
+  //                     but it sends `X-Frame-Options: SAMEORIGIN`, so it
+  //                     cannot be embedded in an iframe.
+  //
+  // Being able to join at all beats being inline, so ffmuc wins and the web
+  // build opens the call in a second tab (see `jitsiSupportsIframe`).
+  static const String jitsiDomain = 'meet.ffmuc.net';
+  static const String jitsiServerUrl = 'https://$jitsiDomain';
+  static const String jitsiRoomPrefix = 'BloomSpeech_';
+
+  /// Whether [jitsiDomain] permits being framed by this app on web.
+  /// Keep in sync with the host above — a wrong value here shows the clinician
+  /// a blank grey box instead of the call.
+  static const bool jitsiSupportsIframe = false;
+
   // ─── Min Token Positions Per Theme ───
   static const int minTokenPositions = 20;
 

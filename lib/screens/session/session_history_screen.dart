@@ -9,6 +9,8 @@ import '../../config/theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/session.dart';
+import '../../widgets/back_to_home_scope.dart';
+import '../../widgets/load_error_view.dart';
 
 class SessionHistoryScreen extends ConsumerWidget {
   final String childId;
@@ -19,7 +21,8 @@ class SessionHistoryScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Scaffold(body: Center(child: Text('Login required')));
 
-    return Scaffold(
+    return BackToHomeScope(
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Session History'),
@@ -34,14 +37,18 @@ class SessionHistoryScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
         ),
       ),
-      body: StreamBuilder<List<Session>>(
-        stream: ref.read(firestoreServiceProvider).getSessions(
+      body: FutureBuilder<List<Session>>(
+        future: ref.read(firestoreServiceProvider).fetchSessions(
           clinicianId: user.uid,
           childId: childId,
         ),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          // A failed query must not look like "no sessions yet".
+          if (snapshot.hasError) {
+            return LoadErrorView(error: snapshot.error!);
           }
 
           final sessions = snapshot.data ?? [];
@@ -154,6 +161,7 @@ class SessionHistoryScreen extends ConsumerWidget {
           );
         },
       ),
+    ),
     );
   }
 

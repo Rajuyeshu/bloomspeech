@@ -128,7 +128,13 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
           ),
         ),
         leading: IconButton(
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.goNamed(AppRouter.home);
+            }
+          },
           icon: const Icon(
             Icons.arrow_back_rounded,
             color: Color(0xFF2D3142),

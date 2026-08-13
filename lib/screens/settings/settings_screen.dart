@@ -9,6 +9,7 @@ import '../../config/routes/app_router.dart';
 import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/language_service.dart';
+import '../../widgets/back_to_home_scope.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -18,12 +19,19 @@ class SettingsScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final language = ref.watch(appLanguageProvider);
 
-    return Scaffold(
+    return BackToHomeScope(
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Settings'),
         leading: IconButton(
-          onPressed: () => context.goNamed(AppRouter.home),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.goNamed(AppRouter.home);
+            }
+          },
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
         ),
       ),
@@ -201,6 +209,26 @@ class SettingsScreen extends ConsumerWidget {
                     // Open help
                   },
                 ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.troubleshoot_rounded,
+                        color: AppColors.primary, size: 20),
+                  ),
+                  title: Text('Data Diagnostics',
+                      style: AppTextStyles.titleSmall),
+                  subtitle: Text('Check why progress may be missing',
+                      style: AppTextStyles.labelSmall),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                      size: 16, color: AppColors.textHint),
+                  onTap: () => context.pushNamed(AppRouter.dataDiagnostics),
+                ),
               ],
             ).animate().fadeIn(delay: 300.ms, duration: 500.ms),
 
@@ -273,6 +301,7 @@ class SettingsScreen extends ConsumerWidget {
           ],
         ),
       ),
+    ),
     );
   }
 

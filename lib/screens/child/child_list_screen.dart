@@ -28,10 +28,10 @@ class ChildListScreen extends ConsumerWidget {
       ),
       body: user == null
           ? const Center(child: Text('Please log in'))
-          : StreamBuilder<List<ChildProfile>>(
-              stream: ref
+          : FutureBuilder<List<ChildProfile>>(
+              future: ref
                   .read(firestoreServiceProvider)
-                  .getChildren(user.uid),
+                  .fetchChildren(user.uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());

@@ -11,6 +11,8 @@ import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/session.dart';
+import '../../widgets/back_to_home_scope.dart';
+import '../../widgets/load_error_view.dart';
 
 class ProgressDashboard extends ConsumerWidget {
   final String childId;
@@ -23,7 +25,8 @@ class ProgressDashboard extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('Login required')));
     }
 
-    return Scaffold(
+    return BackToHomeScope(
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Progress Dashboard'),
@@ -39,7 +42,7 @@ class ProgressDashboard extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () => context.goNamed(
+            onPressed: () => context.pushNamed(
               AppRouter.sessionCompare,
               pathParameters: {'childId': childId},
             ),
@@ -48,14 +51,18 @@ class ProgressDashboard extends ConsumerWidget {
           ),
         ],
       ),
-      body: StreamBuilder<List<Session>>(
-        stream: ref.read(firestoreServiceProvider).getSessions(
+      body: FutureBuilder<List<Session>>(
+        future: ref.read(firestoreServiceProvider).fetchSessions(
               clinicianId: user.uid,
               childId: childId,
             ),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          // A failed query must not look like "no sessions yet".
+          if (snapshot.hasError) {
+            return LoadErrorView(error: snapshot.error!);
           }
 
           final sessions = (snapshot.data ?? []).reversed.toList();
@@ -124,6 +131,7 @@ class ProgressDashboard extends ConsumerWidget {
           );
         },
       ),
+    ),
     );
   }
 

@@ -12,6 +12,7 @@ import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/audio_service.dart';
+import '../../services/video_call_service.dart';
 import '../../models/session.dart';
 import '../../utils/bilingual_phrases.dart';
 import '../../widgets/embedded_video_call.dart';
@@ -84,6 +85,20 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
   bool _showFeedback = false;
   bool _isSmoothFeedback = true;
   bool _showEmbeddedVideoCall = true;
+
+  // ─── Clinician control over the kid's call ───
+  bool _kidVideoStarted = false;
+  bool _kidAudioMuted = false;
+  bool _kidVideoMuted = false;
+
+  /// Writes a control flag to the session row; the kid's device polls it.
+  void _setKidCallFlag(String key, bool value) {
+    final code = ref.read(activeSessionProvider)?.sessionCode;
+    if (code == null) return;
+    ref
+        .read(firestoreServiceProvider)
+        .updateActiveSession(sessionCode: code, data: {key: value});
+  }
 
   String _generateSessionCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -312,7 +327,13 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     // Navigate to reward screen after a brief delay
     Future.delayed(const Duration(milliseconds: 500), () async {
       if (mounted) {
-        await context.pushNamed(AppRouter.reward);
+        final currentConfig = ref.read(activeSessionProvider)?.config;
+        await context.pushNamed(
+          AppRouter.reward,
+          queryParameters: {
+            'miniGame': currentConfig?.miniGame ?? 'bubbleBurst',
+          },
+        );
         // After clinician returns from reward screen, reset the flags
         final currentState = ref.read(activeSessionProvider);
         if (currentState?.sessionCode != null) {
@@ -370,15 +391,35 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     );
 
     if (confirmed == true) {
-      // Signal session completed to kid's device
+      // Signal session completed to kid's device. Also clear the video flag so
+      // a kid whose app reads this before the completed status still drops out
+      // of the meeting rather than sitting in an abandoned call.
       final state = ref.read(activeSessionProvider);
       if (state?.sessionCode != null) {
         await ref.read(firestoreServiceProvider).updateActiveSession(
           sessionCode: state!.sessionCode!,
-          data: {'status': 'completed'},
+          data: {'status': 'completed', 'kidVideoStarted': false},
         );
       }
-      await _saveSession();
+
+      // Leave the conference on this device too.
+      await VideoCallService.leaveCall();
+      try {
+        await _saveSession();
+      } catch (e) {
+        // Never let a failed save look like a successful one — that is why
+        // progress and history could silently stay empty.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 8),
+              content: Text('Could not save this session: $e'),
+            ),
+          );
+        }
+        return;
+      }
       if (mounted) {
         context.goNamed(AppRouter.sessionSummary);
       }
@@ -389,6 +430,27 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     final user = ref.read(currentUserProvider);
     final state = ref.read(activeSessionProvider);
     if (user == null || state == null) return;
+
+    // Attach the kid's login to this child before saving. Done here, with the
+    // clinician's credentials, because the clinician owns the child row —
+    // the kid's own attempt is refused whenever row-level security restricts
+    // `children` to its owner, which left the kid's progress permanently empty.
+    if (state.sessionCode != null) {
+      try {
+        final active = await ref
+            .read(firestoreServiceProvider)
+            .fetchActiveSession(state.sessionCode!);
+        final kidId = active?.kidUserId;
+        if (kidId != null && kidId.isNotEmpty) {
+          await ref.read(firestoreServiceProvider).linkKidToChild(
+                childId: state.config.childId,
+                kidUserId: kidId,
+              );
+        }
+      } catch (e) {
+        debugPrint('Linking kid to child on save failed: $e');
+      }
+    }
 
     final duration = DateTime.now().difference(state.startTime);
     final stats = SessionStats.calculate(
@@ -426,11 +488,20 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
           );
     }
 
-    // Clean up active session
-    if (state.sessionCode != null) {
-      await ref
-          .read(firestoreServiceProvider)
-          .deleteActiveSession(state.sessionCode!);
+    // Clean up the active session — but only after a grace period.
+    //
+    // The kid's device discovers "session over" by polling this row every 2s
+    // and reading status == completed. Deleting it right away almost always
+    // wins that race, the poll returns null, and the kid is left stranded on
+    // the session screen forever. Keep the completed row around long enough
+    // for the kid to observe it.
+    final code = state.sessionCode;
+    if (code != null) {
+      final service = ref.read(firestoreServiceProvider);
+      Future.delayed(
+        const Duration(seconds: 30),
+        () => service.deleteActiveSession(code),
+      );
     }
   }
 
@@ -455,10 +526,12 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     }
 
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenHeight < 750;
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         await _endSession();
       },
@@ -477,7 +550,14 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                 ),
               ),
               child: SafeArea(
-                child: Column(
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: screenHeight - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
+                    ),
+                    child: IntrinsicHeight(
+                      child: Column(
                   children: [
                     // ─── Top Bar ───
                     Padding(
@@ -614,8 +694,8 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                   const SizedBox(height: 8),
 
                   // ─── Interactive Theme Token Board ───
-                  Expanded(
-                    flex: _showEmbeddedVideoCall ? 3 : 5,
+                  SizedBox(
+                    height: isSmallScreen ? 180 : 240,
                     child: ThemeTokenBoardWidget(
                       theme: PlayTheme.values.firstWhere(
                         (t) => t.name == state.config.playTheme,
@@ -628,7 +708,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
 
                   // ─── Stats Row ───
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -651,22 +731,29 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 12),
-
                   // ─── Embedded Video Call (inline, below token board) ───
-                  if (_showEmbeddedVideoCall && state.sessionCode != null)
+                  if (_showEmbeddedVideoCall && state.sessionCode != null) ...[
                     Container(
-                      height: MediaQuery.of(context).size.height < 750 ? 150 : 200,
+                      height: isSmallScreen ? 130 : 180,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(18),
                         child: EmbeddedVideoCallWidget(
+                          // This screen rebuilds every second for the session
+                          // timer; the key keeps the call State alive across
+                          // those rebuilds instead of restarting the call.
+                          key: ValueKey('call-${state.sessionCode}'),
                           sessionCode: state.sessionCode!,
                           userName: 'Clinician',
                           isClinician: true,
+                          // Starting the kid's video puts the clinician in the
+                          // same room at the same time.
+                          autoJoin: _kidVideoStarted,
                         ),
                       ),
                     ),
+                    _buildKidCallControls(),
+                  ],
 
                   const SizedBox(height: 12),
 
@@ -680,7 +767,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                           child: GestureDetector(
                             onTap: _onSmooth,
                             child: Container(
-                              height: 90,
+                              height: isSmallScreen ? 72 : 90,
                               decoration: BoxDecoration(
                                 gradient: AppColors.smoothGradient,
                                 borderRadius: BorderRadius.circular(24),
@@ -696,17 +783,17 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.check_circle_rounded,
                                     color: Colors.white,
-                                    size: 32,
+                                    size: isSmallScreen ? 26 : 32,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     'Smooth',
                                     style:
                                         AppTextStyles.buttonText.copyWith(
-                                      fontSize: 16,
+                                      fontSize: isSmallScreen ? 14 : 16,
                                     ),
                                   ),
                                   Text(
@@ -729,7 +816,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                           child: GestureDetector(
                             onTap: _onBumpy,
                             child: Container(
-                              height: 90,
+                              height: isSmallScreen ? 72 : 90,
                               decoration: BoxDecoration(
                                 gradient: AppColors.bumpyGradient,
                                 borderRadius: BorderRadius.circular(24),
@@ -745,17 +832,17 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.replay_circle_filled_rounded,
                                     color: Colors.white,
-                                    size: 32,
+                                    size: isSmallScreen ? 26 : 32,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     'Bumpy',
                                     style:
                                         AppTextStyles.buttonText.copyWith(
-                                      fontSize: 16,
+                                      fontSize: isSmallScreen ? 14 : 16,
                                     ),
                                   ),
                                   Text(
@@ -777,8 +864,11 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                   const SizedBox(height: 16),
                 ],
               ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
 
           // ─── Feedback Overlay ───
           if (_showFeedback)
@@ -836,6 +926,93 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
         ],
       ),
     ),
+    );
+  }
+
+  /// Clinician-only controls over the kid's device.
+  ///
+  /// These write flags to the shared session row; the kid's app polls them and
+  /// applies them to its own Jitsi client. Doing it cooperatively avoids
+  /// needing real moderator rights, which the public server will not grant.
+  Widget _buildKidCallControls() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: _kidControlButton(
+              icon: _kidVideoStarted
+                  ? Icons.stop_circle_outlined
+                  : Icons.play_circle_outline_rounded,
+              label: _kidVideoStarted ? 'Stop video call' : 'Start video call',
+              active: _kidVideoStarted,
+              onTap: () {
+                setState(() => _kidVideoStarted = !_kidVideoStarted);
+                _setKidCallFlag('kidVideoStarted', _kidVideoStarted);
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          _kidControlButton(
+            icon: _kidAudioMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+            label: _kidAudioMuted ? 'Unmute' : 'Mute',
+            active: _kidAudioMuted,
+            onTap: () {
+              setState(() => _kidAudioMuted = !_kidAudioMuted);
+              _setKidCallFlag('kidAudioMuted', _kidAudioMuted);
+            },
+          ),
+          const SizedBox(width: 8),
+          _kidControlButton(
+            icon: _kidVideoMuted
+                ? Icons.videocam_off_rounded
+                : Icons.videocam_rounded,
+            label: _kidVideoMuted ? 'Cam on' : 'Cam off',
+            active: _kidVideoMuted,
+            onTap: () {
+              setState(() => _kidVideoMuted = !_kidVideoMuted);
+              _setKidCallFlag('kidVideoMuted', _kidVideoMuted);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kidControlButton({
+    required IconData icon,
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    final color = active ? AppColors.secondary : AppColors.primary;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

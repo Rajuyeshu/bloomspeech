@@ -289,6 +289,26 @@ class ActiveSession {
   final int tokensPerFluent;
   final int tokensPerDysfluent;
 
+  // ─── Clinician-controlled call state ───
+  // The kid's device never decides these for itself; it polls them and obeys.
+  /// Clinician has started the kid's video call. Until this is true the kid
+  /// waits rather than auto-joining.
+  final bool kidVideoStarted;
+
+  /// Clinician has muted the kid's microphone.
+  final bool kidAudioMuted;
+
+  /// Clinician has turned off the kid's camera.
+  final bool kidVideoMuted;
+
+  /// Auth id of the kid who joined with this code.
+  ///
+  /// The kid records it here so the clinician — who owns the child row and is
+  /// therefore always permitted to write it — can attach it to `children` when
+  /// the session is saved. The kid's own device may be refused that write by
+  /// row-level security, which is why it cannot be the one to do it.
+  final String? kidUserId;
+
   ActiveSession({
     required this.sessionCode,
     required this.clinicianId,
@@ -309,6 +329,10 @@ class ActiveSession {
     this.rewardCyclesCompleted = 0,
     this.tokensPerFluent = 1,
     this.tokensPerDysfluent = 1,
+    this.kidVideoStarted = false,
+    this.kidAudioMuted = false,
+    this.kidVideoMuted = false,
+    this.kidUserId,
   });
 
   Map<String, dynamic> toFirestore() {
@@ -368,6 +392,11 @@ class ActiveSession {
       rewardCyclesCompleted: data['reward_cycles_completed'] ?? data['rewardCyclesCompleted'] ?? 0,
       tokensPerFluent: data['tokens_per_fluent'] ?? data['tokensPerFluent'] ?? 1,
       tokensPerDysfluent: data['tokens_per_dysfluent'] ?? data['tokensPerDysfluent'] ?? 1,
+      kidVideoStarted:
+          data['kid_video_started'] ?? data['kidVideoStarted'] ?? false,
+      kidAudioMuted: data['kid_audio_muted'] ?? data['kidAudioMuted'] ?? false,
+      kidVideoMuted: data['kid_video_muted'] ?? data['kidVideoMuted'] ?? false,
+      kidUserId: data['kid_user_id'] ?? data['kidUserId'],
     );
   }
 

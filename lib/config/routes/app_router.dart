@@ -23,6 +23,7 @@ import '../../screens/reward/mini_games/rangoli_paint_game.dart';
 import '../../screens/progress/progress_dashboard.dart';
 import '../../screens/progress/session_compare_screen.dart';
 import '../../screens/settings/settings_screen.dart';
+import '../../screens/settings/data_diagnostics_screen.dart';
 
 /// App router configuration
 class AppRouter {
@@ -49,6 +50,7 @@ class AppRouter {
   static const String progressDashboard = 'progressDashboard';
   static const String sessionCompare = 'sessionCompare';
   static const String settings = 'settings';
+  static const String dataDiagnostics = 'dataDiagnostics';
 
   // Route paths
   static const String splashPath = '/';
@@ -73,6 +75,7 @@ class AppRouter {
   static const String progressDashboardPath = '/progress/:childId';
   static const String sessionComparePath = '/progress/compare/:childId';
   static const String settingsPath = '/settings';
+  static const String dataDiagnosticsPath = '/settings/diagnostics';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -199,7 +202,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRouter.rewardPath,
         name: AppRouter.reward,
-        builder: (context, state) => const RewardScreen(),
+        builder: (context, state) => RewardScreen(
+          miniGame: state.uri.queryParameters['miniGame'],
+          sessionCode: state.uri.queryParameters['sessionCode'],
+        ),
       ),
       GoRoute(
         path: AppRouter.bubbleBurstPath,
@@ -234,6 +240,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRouter.settingsPath,
         name: AppRouter.settings,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRouter.dataDiagnosticsPath,
+        name: AppRouter.dataDiagnostics,
+        builder: (context, state) => const DataDiagnosticsScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

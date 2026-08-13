@@ -5,11 +5,15 @@ import 'package:go_router/go_router.dart';
 import 'package:confetti/confetti.dart';
 import '../../config/theme/app_colors.dart';
 import '../../config/theme/app_text_styles.dart';
+import '../../config/routes/app_router.dart';
 import '../../services/audio_service.dart';
 import 'dart:math';
 
 class RewardScreen extends ConsumerStatefulWidget {
-  const RewardScreen({super.key});
+  final String? miniGame;
+  final String? sessionCode;
+
+  const RewardScreen({super.key, this.miniGame, this.sessionCode});
 
   @override
   ConsumerState<RewardScreen> createState() => _RewardScreenState();
@@ -43,15 +47,38 @@ class _RewardScreenState extends ConsumerState<RewardScreen>
       ));
     });
 
-    // Remove after animation
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) {
         setState(() {
-          _sparkles.removeWhere(
-              (s) => s.id == _sparkles.firstOrNull?.id);
+          _sparkles.removeWhere((s) => s.id == _sparkles.firstOrNull?.id);
         });
       }
     });
+  }
+
+  void _navigateToMiniGame() {
+    final game = widget.miniGame ?? 'bubbleBurst';
+    switch (game) {
+      case 'bubbleBurst':
+        context.pushNamed(AppRouter.bubbleBurst);
+        break;
+      case 'plantWater':
+        context.pushNamed(AppRouter.plantWater);
+        break;
+      case 'rangoliPaint':
+        context.pushNamed(AppRouter.rangoliPaint);
+        break;
+      default:
+        context.pushNamed(AppRouter.bubbleBurst);
+    }
+  }
+
+  void _goBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.goNamed(AppRouter.home);
+    }
   }
 
   @override
@@ -87,20 +114,16 @@ class _RewardScreenState extends ConsumerState<RewardScreen>
                 child: Icon(
                   Icons.star_rounded,
                   size: 8 + random.nextDouble() * 12,
-                  color:
-                      Colors.white.withValues(alpha: 0.2 + random.nextDouble() * 0.3),
+                  color: Colors.white
+                      .withValues(alpha: 0.2 + random.nextDouble() * 0.3),
                 )
-                    .animate(
-                      onPlay: (c) => c.repeat(reverse: true),
-                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
                     .fadeIn(
-                      delay: Duration(milliseconds: random.nextInt(2000)),
-                    )
+                        delay: Duration(milliseconds: random.nextInt(2000)))
                     .then()
                     .fadeOut(
                       duration: Duration(
-                        milliseconds: 1000 + random.nextInt(2000),
-                      ),
+                          milliseconds: 1000 + random.nextInt(2000)),
                     ),
               );
             }),
@@ -108,84 +131,118 @@ class _RewardScreenState extends ConsumerState<RewardScreen>
             // Main content
             SafeArea(
               child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Trophy/star
-                    const Text('🏆', style: TextStyle(fontSize: 80))
-                        .animate()
-                        .scale(
-                          begin: const Offset(0.2, 0.2),
-                          end: const Offset(1, 1),
-                          duration: 800.ms,
-                          curve: Curves.elasticOut,
-                        )
-                        .then()
-                        .shimmer(
-                          duration: 1500.ms,
-                          color: AppColors.tokenGold.withValues(alpha: 0.5),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Trophy
+                      const Text('🏆', style: TextStyle(fontSize: 80))
+                          .animate()
+                          .scale(
+                            begin: const Offset(0.2, 0.2),
+                            end: const Offset(1, 1),
+                            duration: 800.ms,
+                            curve: Curves.elasticOut,
+                          )
+                          .then()
+                          .shimmer(
+                            duration: 1500.ms,
+                            color:
+                                AppColors.tokenGold.withValues(alpha: 0.5),
+                          ),
+
+                      const SizedBox(height: 24),
+
+                      Text(
+                        'Amazing! 🌟',
+                        style: AppTextStyles.displayMedium.copyWith(
+                          color: AppColors.tokenGold,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                          .animate()
+                          .fadeIn(delay: 400.ms, duration: 600.ms)
+                          .slideY(begin: 0.3, end: 0),
+
+                      const SizedBox(height: 10),
+
+                      Text(
+                        'You reached your goal!',
+                        style: AppTextStyles.headlineSmall.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      )
+                          .animate()
+                          .fadeIn(delay: 700.ms, duration: 600.ms),
+
+                      const SizedBox(height: 12),
+
+                      Text(
+                        'Tap anywhere for sparkles! ✨',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: Colors.white.withValues(alpha: 0.6),
+                        ),
+                      )
+                          .animate()
+                          .fadeIn(delay: 1200.ms, duration: 600.ms),
+
+                      const SizedBox(height: 32),
+
+                      // Play Mini Game button (only if miniGame was selected)
+                      if (widget.miniGame != null &&
+                          widget.miniGame!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: ElevatedButton.icon(
+                            onPressed: _navigateToMiniGame,
+                            icon: const Icon(Icons.sports_esports_rounded,
+                                size: 24),
+                            label: const Text('Play Mini Game! 🎮'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              elevation: 8,
+                              shadowColor:
+                                  AppColors.accent.withValues(alpha: 0.4),
+                            ),
+                          )
+                              .animate()
+                              .fadeIn(delay: 1300.ms, duration: 600.ms)
+                              .slideY(begin: 0.2, end: 0),
                         ),
 
-                    const SizedBox(height: 24),
-
-                    Text(
-                      'Amazing! 🌟',
-                      style: AppTextStyles.displayMedium.copyWith(
-                        color: AppColors.tokenGold,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    )
-                        .animate()
-                        .fadeIn(delay: 400.ms, duration: 600.ms)
-                        .slideY(begin: 0.3, end: 0),
-
-                    const SizedBox(height: 10),
-
-                    Text(
-                      'You reached your goal!',
-                      style: AppTextStyles.headlineSmall.copyWith(
-                        color: Colors.white.withValues(alpha: 0.9),
-                      ),
-                    )
-                        .animate()
-                        .fadeIn(delay: 700.ms, duration: 600.ms),
-
-                    const SizedBox(height: 12),
-
-                    Text(
-                      'Tap anywhere for sparkles! ✨',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: Colors.white.withValues(alpha: 0.6),
-                      ),
-                    )
-                        .animate()
-                        .fadeIn(delay: 1200.ms, duration: 600.ms),
-
-                    const SizedBox(height: 40),
-
-                    // Done button (clinician controls)
-                    ElevatedButton.icon(
-                      onPressed: () => context.pop(),
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Done — Continue Session'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.tokenGold,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                          vertical: 16,
+                      // Done button
+                      ElevatedButton.icon(
+                        onPressed: _goBack,
+                        icon: const Icon(Icons.check_rounded),
+                        label: const Text('Done — Continue Session'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.tokenGold,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 16,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          elevation: 8,
+                          shadowColor:
+                              AppColors.tokenGold.withValues(alpha: 0.4),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        elevation: 8,
-                        shadowColor: AppColors.tokenGold.withValues(alpha: 0.4),
-                      ),
-                    )
-                        .animate()
-                        .fadeIn(delay: 1500.ms, duration: 600.ms)
-                        .slideY(begin: 0.2, end: 0),
-                  ],
+                      )
+                          .animate()
+                          .fadeIn(delay: 1500.ms, duration: 600.ms)
+                          .slideY(begin: 0.2, end: 0),
+                    ],
+                  ),
                 ),
               ),
             ),

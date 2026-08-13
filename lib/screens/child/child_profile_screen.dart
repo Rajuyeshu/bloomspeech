@@ -47,13 +47,19 @@ class ChildProfileScreen extends ConsumerWidget {
                 expandedHeight: 200,
                 pinned: true,
                 leading: IconButton(
-                  onPressed: () => context.pop(),
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.goNamed(AppRouter.home);
+                    }
+                  },
                   icon: const Icon(Icons.arrow_back_ios_new_rounded),
                   color: Colors.white,
                 ),
                 actions: [
                   IconButton(
-                    onPressed: () => context.goNamed(
+                    onPressed: () => context.pushNamed(
                       AppRouter.editChild,
                       pathParameters: {'childId': childId},
                     ),
@@ -170,7 +176,7 @@ class ChildProfileScreen extends ConsumerWidget {
                         width: double.infinity,
                         height: 54,
                         child: ElevatedButton.icon(
-                          onPressed: () => context.goNamed(
+                          onPressed: () => context.pushNamed(
                             AppRouter.sessionSetup,
                             pathParameters: {'childId': childId},
                           ),
@@ -191,7 +197,7 @@ class ChildProfileScreen extends ConsumerWidget {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () => context.goNamed(
+                              onPressed: () => context.pushNamed(
                                 AppRouter.progressDashboard,
                                 pathParameters: {'childId': childId},
                               ),
@@ -205,7 +211,7 @@ class ChildProfileScreen extends ConsumerWidget {
                           const SizedBox(width: 12),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () => context.goNamed(
+                              onPressed: () => context.pushNamed(
                                 AppRouter.sessionHistory,
                                 pathParameters: {'childId': childId},
                               ),
@@ -271,8 +277,8 @@ class ChildProfileScreen extends ConsumerWidget {
   }
 
   Widget _buildRecentSessions(WidgetRef ref, String clinicianId) {
-    return StreamBuilder<List<Session>>(
-      stream: ref.read(firestoreServiceProvider).getSessions(
+    return FutureBuilder<List<Session>>(
+      future: ref.read(firestoreServiceProvider).fetchSessions(
             clinicianId: clinicianId,
             childId: childId,
           ),
