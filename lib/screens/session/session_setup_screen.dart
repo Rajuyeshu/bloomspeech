@@ -1,4 +1,6 @@
 import 'dart:math';
+import '../../utils/app_localizations.dart';
+import '../../services/language_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -94,7 +96,12 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
       miniGame: _miniGame.name,
       sessionTimerMinutes: _sessionTimer,
       physicalReward: _rewardType == RewardType.physicalReward ? _physicalReward : null,
-      playTheme: 'diyaFestival',
+      playTheme: PlayTheme.initial.name,
+      // The session carries the interface language so the child hears feedback
+      // in the language of the therapy. Omitting it left SessionConfig on its
+      // 'en' default, so switching the app to Kannada changed every label but
+      // the spoken phrases stayed English.
+      language: ref.read(appLanguageProvider).code,
     );
 
     // Save config in provider
@@ -107,6 +114,8 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild when the interface language changes.
+    ref.watch(appLanguageProvider);
     if (_isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -120,7 +129,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
         elevation: 0,
         centerTitle: true,
         title: Text(
-          'Session Setup',
+          'Session Setup'.tr(),
           style: AppTextStyles.headlineMedium.copyWith(
             fontSize: 22,
             fontWeight: FontWeight.w700,
@@ -148,11 +157,10 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ─── Treatment Level Section ───
-            _buildSectionHeader('Treatment Level'),
+            _buildSectionHeader('treatment_level'.tr()),
             const SizedBox(height: 12),
             _buildTreatmentLevelGrid(),
             const SizedBox(height: 12),
-            _buildTreatmentLevelHelperText(),
 
             const SizedBox(height: 24),
 
@@ -164,7 +172,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
             const SizedBox(height: 24),
 
             // ─── Reward Type Section ───
-            _buildSectionHeader('Reward Type'),
+            _buildSectionHeader('reward_type'.tr()),
             const SizedBox(height: 12),
             _buildRewardTypeCard(),
 
@@ -196,7 +204,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Choose Theme',
+                      'Choose Theme'.tr(),
                       style: AppTextStyles.buttonText.copyWith(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -229,13 +237,9 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
 
   // ─── Treatment Level Grid ───
   Widget _buildTreatmentLevelGrid() {
-    final levels = [
-      TherapyLevel.word,
-      TherapyLevel.sentence,
-      TherapyLevel.continuousSpeech,
-      TherapyLevel.narrative,
-      TherapyLevel.conversational,
-    ];
+    // The four current levels. Hardcoding the list meant the retired sentence
+    // level kept appearing here after it was withdrawn.
+    final levels = TherapyLevel.selectable;
 
     return Wrap(
       spacing: 10,
@@ -286,50 +290,6 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
     );
   }
 
-  // Helper text banner for active treatment level
-  Widget _buildTreatmentLevelHelperText() {
-    String text;
-    switch (_level) {
-      case TherapyLevel.word:
-        text = 'Single target words • Clinician prompt: "What is this?"';
-        break;
-      case TherapyLevel.sentence:
-        text = 'Single fluent sentences (3–8 words)';
-        break;
-      case TherapyLevel.continuousSpeech:
-        text = '2–4 connected sentences on same topic';
-        break;
-      case TherapyLevel.narrative:
-        text = 'Short story retell (5–8 sentences)';
-        break;
-      case TherapyLevel.conversational:
-        text = 'Back-and-forth dialogue (2–3 turns)';
-        break;
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0EEFF),
-        borderRadius: BorderRadius.circular(12),
-        border: const Border(
-          left: BorderSide(
-            color: AppColors.primary,
-            width: 4,
-          ),
-        ),
-      ),
-      child: Text(
-        text,
-        style: AppTextStyles.bodyMedium.copyWith(
-          color: AppColors.primary,
-          fontWeight: FontWeight.w600,
-          fontSize: 14,
-        ),
-      ),
-    );
-  }
 
   // ─── Token Configuration Card ───
   Widget _buildTokenConfigurationCard() {
@@ -351,7 +311,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
         children: [
           // Fluent award (+)
           _buildCounterRow(
-            label: 'Fluent award (+)',
+            label: 'Fluent award (+)'.tr(),
             value: _tokensPerFluent,
             minValue: AppConstants.minTokensPerFluent,
             maxValue: AppConstants.maxTokensPerFluent,
@@ -370,7 +330,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
 
           // Dysfluent cost (-)
           _buildCounterRow(
-            label: 'Dysfluent cost (-)',
+            label: 'Dysfluent cost (-)'.tr(),
             value: _tokensPerDysfluent,
             minValue: AppConstants.minTokensPerDysfluent,
             maxValue: AppConstants.maxTokensPerDysfluent,
@@ -389,7 +349,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
 
           // Token goal
           _buildCounterRow(
-            label: 'Token goal',
+            label: 'Token goal'.tr(),
             value: _tokenGoal,
             minValue: AppConstants.minTokenGoal,
             maxValue: AppConstants.maxTokenGoal,
@@ -542,21 +502,21 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
           // Radio Option 1: In-app animation
           _buildRewardRadioTile(
             type: RewardType.inAppAnimation,
-            title: 'In-app animation',
+            title: 'In-app animation'.tr(),
           ),
           const Divider(height: 1, thickness: 1, color: Color(0xFFEDF2F7)),
 
           // Radio Option 2: In-app mini-game
           _buildRewardRadioTile(
             type: RewardType.inAppMiniGame,
-            title: 'In-app mini-game',
+            title: 'In-app mini-game'.tr(),
           ),
           if (_rewardType == RewardType.inAppMiniGame) ...[
             Padding(
               padding: const EdgeInsets.only(left: 20, right: 16, bottom: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: MiniGameType.values.map((game) {
+                children: MiniGameType.selectable.map((game) {
                   final isSelected = _miniGame == game;
                   return GestureDetector(
                     onTap: () => setState(() => _miniGame = game),
@@ -624,7 +584,7 @@ class _SessionSetupScreenState extends ConsumerState<SessionSetupScreen> {
           // Radio Option 3: Physical reward
           _buildRewardRadioTile(
             type: RewardType.physicalReward,
-            title: 'Physical reward',
+            title: 'Physical reward'.tr(),
           ),
           if (_rewardType == RewardType.physicalReward) ...[
             Padding(

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../../config/theme/app_colors.dart';
 import '../../config/theme/app_text_styles.dart';
 import '../../config/theme/app_theme.dart';
@@ -11,6 +11,7 @@ import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/child_profile.dart';
 import '../../models/session.dart';
+import '../../utils/app_time.dart';
 
 class ChildProfileScreen extends ConsumerWidget {
   final String childId;
@@ -20,7 +21,7 @@ class ChildProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     if (user == null) {
-      return const Scaffold(body: Center(child: Text('Please log in')));
+      return Scaffold(body: Center(child: Text('Please log in'.tr())));
     }
 
     return Scaffold(
@@ -37,7 +38,7 @@ class ChildProfileScreen extends ConsumerWidget {
 
           final child = snapshot.data;
           if (child == null) {
-            return const Center(child: Text('Child not found'));
+            return Center(child: Text('Child not found'.tr()));
           }
 
           return CustomScrollView(
@@ -150,7 +151,7 @@ class ChildProfileScreen extends ConsumerWidget {
                           Expanded(
                             child: _buildStatCard(
                               child.lastSessionDate != null
-                                  ? DateFormat('dd MMM').format(child.lastSessionDate!)
+                                  ? AppTime.format(child.lastSessionDate!, 'dd MMM')
                                   : 'None',
                               'Last Session',
                               Icons.calendar_today_outlined,
@@ -160,7 +161,7 @@ class ChildProfileScreen extends ConsumerWidget {
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildStatCard(
-                              DateFormat('dd MMM yyyy').format(child.enrollmentDate),
+                              AppTime.format(child.enrollmentDate, 'dd MMM yyyy'),
                               'Enrolled',
                               Icons.event_note_outlined,
                               AppColors.info,
@@ -181,7 +182,7 @@ class ChildProfileScreen extends ConsumerWidget {
                             pathParameters: {'childId': childId},
                           ),
                           icon: const Icon(Icons.play_arrow_rounded, size: 24),
-                          label: const Text('Start New Session'),
+                          label: Text('Start New Session'.tr()),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             shape: RoundedRectangleBorder(
@@ -202,7 +203,7 @@ class ChildProfileScreen extends ConsumerWidget {
                                 pathParameters: {'childId': childId},
                               ),
                               icon: const Icon(Icons.insights_rounded, size: 20),
-                              label: const Text('Progress'),
+                              label: Text('Progress'.tr()),
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                               ),
@@ -216,7 +217,7 @@ class ChildProfileScreen extends ConsumerWidget {
                                 pathParameters: {'childId': childId},
                               ),
                               icon: const Icon(Icons.history_rounded, size: 20),
-                              label: const Text('History'),
+                              label: Text('History'.tr()),
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                               ),
@@ -228,7 +229,7 @@ class ChildProfileScreen extends ConsumerWidget {
                       const SizedBox(height: 28),
 
                       // Recent Sessions
-                      Text('Recent Sessions', style: AppTextStyles.headlineSmall),
+                      Text('Recent Sessions'.tr(), style: AppTextStyles.headlineSmall),
                       const SizedBox(height: 14),
 
                       _buildRecentSessions(ref, user.uid),
@@ -307,7 +308,7 @@ class ChildProfileScreen extends ConsumerWidget {
                     size: 40, color: AppColors.textHint.withValues(alpha: 0.5)),
                 const SizedBox(height: 12),
                 Text(
-                  'No sessions yet',
+                  'No sessions yet'.tr(),
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textHint,
                   ),
@@ -352,7 +353,7 @@ class ChildProfileScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          DateFormat('dd MMM yyyy').format(session.date),
+                          AppTime.format(session.date, 'dd MMM yyyy'),
                           style: AppTextStyles.titleSmall,
                         ),
                         Text(

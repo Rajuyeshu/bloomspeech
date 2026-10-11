@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
 
     <application
-        android:label="bloomspeech"
+        android:label="BloomSpeech"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         tools:replace="android:label">
@@ -32,6 +32,19 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- OAuth callback. Google sign-in happens in an external browser,
+                 and without this filter Android has nowhere to deliver the
+                 result: the user authenticated successfully and the app never
+                 heard about it, which looked like "Google sign-in doesn't
+                 work". The scheme must match AppConstants.oauthRedirectUrl and
+                 be allowlisted in the Supabase dashboard. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="bloomspeech" android:host="login-callback"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

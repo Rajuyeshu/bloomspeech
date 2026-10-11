@@ -21,8 +21,8 @@ class BilingualPhrases {
       'kn': 'ಅದ್ಭುತ! ಎಷ್ಟು ಚೆನ್ನಾಗಿ ಮಾತಾಡ್ತೀಯ!',
     },
     'fluent_5': {
-      'en': 'You are a star! So smooth!',
-      'kn': 'ನೀನು ಸ್ಟಾರ್! ತುಂಬಾ ಸ್ಮೂತ್!',
+      'en': 'Wow, that was smooth speech!',
+      'kn': 'ಶಾಭಾಶ್, ತುಂಬಾ ಚೆನ್ನಾಗಿ ಮಾತಾಡ್ದೆ!',
     },
     'dysfluent_1': {
       'en': 'Oh, that was a bumpy one! Try again!',

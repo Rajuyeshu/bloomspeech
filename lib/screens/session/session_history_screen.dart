@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../config/routes/app_router.dart';
-import 'package:intl/intl.dart';
 import '../../config/theme/app_colors.dart';
 import '../../config/theme/app_text_styles.dart';
 import '../../config/theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/session.dart';
+import '../../utils/app_time.dart';
 import '../../widgets/back_to_home_scope.dart';
 import '../../widgets/load_error_view.dart';
 
@@ -19,13 +20,13 @@ class SessionHistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    if (user == null) return const Scaffold(body: Center(child: Text('Login required')));
+    if (user == null) return Scaffold(body: Center(child: Text('Login required'.tr())));
 
     return BackToHomeScope(
       child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Session History'),
+        title: Text('Session History'.tr()),
         leading: IconButton(
           onPressed: () {
             if (context.canPop()) {
@@ -47,7 +48,37 @@ class SessionHistoryScreen extends ConsumerWidget {
             return const Center(child: CircularProgressIndicator());
           }
           // A failed query must not look like "no sessions yet".
+          //
+          // On the child's device an unlinked login produces a refusal rather
+          // than a fault; a parent should see an explanation, not a database
+          // error. See ProgressDashboard for the same reasoning.
           if (snapshot.hasError) {
+            if (user.role == 'kid') {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('📒', style: TextStyle(fontSize: 52)),
+                      const SizedBox(height: 14),
+                      Text('No practice history yet'.tr(),
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.headlineSmall),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Your sessions appear here once your therapist '
+                                'finishes a session with you.'
+                            .tr(),
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.bodyMedium
+                            .copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
             return LoadErrorView(error: snapshot.error!);
           }
 
@@ -61,7 +92,7 @@ class SessionHistoryScreen extends ConsumerWidget {
                   Icon(Icons.history_rounded, size: 60,
                       color: AppColors.textHint.withValues(alpha: 0.3)),
                   const SizedBox(height: 16),
-                  Text('No sessions yet', style: AppTextStyles.headlineSmall),
+                  Text('No sessions yet'.tr(), style: AppTextStyles.headlineSmall),
                 ],
               ),
             );
@@ -105,7 +136,7 @@ class SessionHistoryScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            DateFormat('dd MMM yyyy, hh:mm a').format(session.date),
+                            AppTime.format(session.date, 'dd MMM yyyy, hh:mm a'),
                             style: AppTextStyles.titleSmall,
                           ),
                           const SizedBox(height: 4),

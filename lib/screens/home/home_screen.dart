@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,9 +8,11 @@ import '../../config/theme/app_colors.dart';
 import '../../config/theme/app_text_styles.dart';
 import '../../config/theme/app_theme.dart';
 import '../../config/routes/app_router.dart';
+import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/child_profile.dart';
+import '../../utils/app_time.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -28,19 +31,19 @@ class HomeScreen extends ConsumerWidget {
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Exit App?'),
-            content: const Text('Are you sure you want to exit BloomSpeech?'),
+            title: Text('Exit App?'.tr()),
+            content: Text('Are you sure you want to exit BloomSpeech?'.tr()),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
+                child: Text('Cancel'.tr()),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.secondary,
                 ),
-                child: const Text('Exit'),
+                child: Text('Exit'.tr()),
               ),
             ],
           ),
@@ -139,7 +142,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Response Cost Therapy for fluent speech',
+                        AppConstants.appTagline.tr(),
                         style: AppTextStyles.bodySmall.copyWith(
                           color: Colors.white.withValues(alpha: 0.8),
                         ),
@@ -153,7 +156,7 @@ class HomeScreen extends ConsumerWidget {
                             context.pushNamed(AppRouter.children);
                           },
                           icon: const Icon(Icons.play_arrow_rounded, size: 22),
-                          label: const Text('Start New Session'),
+                          label: Text('Start New Session'.tr()),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: AppColors.primary,
@@ -182,8 +185,8 @@ class HomeScreen extends ConsumerWidget {
                         icon: Icons.people_rounded,
                         iconColor: AppColors.primary,
                         iconBg: AppColors.surfaceVariant,
-                        label: 'My Children',
-                        subtitle: 'Manage profiles',
+                        label: 'My Children'.tr(),
+                        subtitle: 'Manage profiles'.tr(),
                         onTap: () => context.pushNamed(AppRouter.children),
                         delay: 300,
                       ),
@@ -195,8 +198,8 @@ class HomeScreen extends ConsumerWidget {
                         icon: Icons.history_rounded,
                         iconColor: AppColors.accent,
                         iconBg: AppColors.accentLight.withValues(alpha: 0.3),
-                        label: 'History',
-                        subtitle: 'Past sessions',
+                        label: 'History'.tr(),
+                        subtitle: 'Past sessions'.tr(),
                         onTap: () => context.pushNamed(AppRouter.children),
                         delay: 400,
                       ),
@@ -211,13 +214,13 @@ class HomeScreen extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Recent Children',
+                      'Recent Children'.tr(),
                       style: AppTextStyles.headlineSmall,
                     ),
                     TextButton(
                       onPressed: () => context.pushNamed(AppRouter.children),
                       child: Text(
-                        'View All',
+                        'View All'.tr(),
                         style: AppTextStyles.labelMedium.copyWith(
                           color: AppColors.primary,
                         ),
@@ -264,14 +267,14 @@ class HomeScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Quick Tip',
+                              'Quick Tip'.tr(),
                               style: AppTextStyles.labelLarge.copyWith(
                                 color: AppColors.info,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Tap Smooth or Bumpy within 1 second of the child\'s utterance for best results.',
+                              'Tap Smooth or Bumpy within 1 second of the child\'s utterance for best results.'.tr(),
                               style: AppTextStyles.bodySmall.copyWith(
                                 color: AppColors.textSecondary,
                               ),
@@ -470,7 +473,7 @@ class HomeScreen extends ConsumerWidget {
               icon: const Icon(Icons.play_circle_filled_rounded),
               color: AppColors.primary,
               iconSize: 32,
-              tooltip: 'Start Session',
+              tooltip: 'Start Session'.tr(),
             ),
           ],
         ),
@@ -505,14 +508,14 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'No children yet',
+            'No children yet'.tr(),
             style: AppTextStyles.titleMedium.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'Add a child to start your first therapy session',
+            'Add a child to start your first therapy session'.tr(),
             style: AppTextStyles.bodySmall,
             textAlign: TextAlign.center,
           ),
@@ -520,7 +523,7 @@ class HomeScreen extends ConsumerWidget {
           ElevatedButton.icon(
             onPressed: () => context.pushNamed(AppRouter.addChild),
             icon: const Icon(Icons.add_rounded, size: 20),
-            label: const Text('Add Child'),
+            label: Text('Add Child'.tr()),
             style: ElevatedButton.styleFrom(
               padding:
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -532,10 +535,12 @@ class HomeScreen extends ConsumerWidget {
   }
 
   String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning ☀️';
-    if (hour < 17) return 'Good Afternoon 🌤️';
-    return 'Good Evening 🌙';
+    // Greet on the IST clock, so a device set to another zone still says
+    // "Good Morning" when it is morning in the clinic.
+    final hour = AppTime.toIst(DateTime.now()).hour;
+    if (hour < 12) return 'Good Morning ☀️'.tr();
+    if (hour < 17) return 'Good Afternoon 🌤️'.tr();
+    return 'Good Evening 🌙'.tr();
   }
 
   Widget _buildKidHomeScreen(BuildContext context, WidgetRef ref, AppUser user) {
@@ -546,19 +551,19 @@ class HomeScreen extends ConsumerWidget {
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Exit App?'),
-            content: const Text('Are you sure you want to exit BloomSpeech?'),
+            title: Text('Exit App?'.tr()),
+            content: Text('Are you sure you want to exit BloomSpeech?'.tr()),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
+                child: Text('Cancel'.tr()),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.secondary,
                 ),
-                child: const Text('Exit'),
+                child: Text('Exit'.tr()),
               ),
             ],
           ),
@@ -653,7 +658,7 @@ class HomeScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Let\'s practice smooth speech!',
+                              'Let\'s practice smooth speech!'.tr(),
                               style: AppTextStyles.titleMedium.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textPrimary,
@@ -661,7 +666,7 @@ class HomeScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Practice makes perfect. Have fun with your therapist today! 🪁',
+                              'Practice makes perfect. Have fun with your therapist today! 🪁'.tr(),
                               style: AppTextStyles.bodySmall.copyWith(
                                 color: AppColors.textSecondary,
                               ),
@@ -697,7 +702,7 @@ class HomeScreen extends ConsumerWidget {
                           const Icon(Icons.videocam_rounded, color: Colors.white, size: 28),
                           const SizedBox(width: 10),
                           Text(
-                            'Live Session',
+                            'Live Session'.tr(),
                             style: AppTextStyles.titleLarge.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -707,7 +712,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Join a video call and start speech practice with your therapist.',
+                        'Join a video call and start speech practice with your therapist.'.tr(),
                         style: AppTextStyles.bodySmall.copyWith(
                           color: Colors.white.withValues(alpha: 0.9),
                         ),
@@ -720,7 +725,7 @@ class HomeScreen extends ConsumerWidget {
                           onPressed: () => context.pushNamed(AppRouter.kidJoin),
                           icon: const Icon(Icons.play_arrow_rounded, size: 24),
                           label: Text(
-                            'Join Your Session',
+                            'Join Your Session'.tr(),
                             style: AppTextStyles.buttonText.copyWith(
                               color: AppColors.accentDark,
                               fontWeight: FontWeight.bold,
@@ -767,7 +772,7 @@ class HomeScreen extends ConsumerWidget {
                           children: [
                             Expanded(
                               child: _buildKidStatCard(
-                                title: 'Completed',
+                                title: 'Completed'.tr(),
                                 value: '$totalSessions sessions',
                                 icon: Icons.done_all_rounded,
                                 color: AppColors.primary,
@@ -776,7 +781,7 @@ class HomeScreen extends ConsumerWidget {
                             const SizedBox(width: 14),
                             Expanded(
                               child: _buildKidStatCard(
-                                title: 'Active Level',
+                                title: 'Active Level'.tr(),
                                 value: currentLevel,
                                 icon: Icons.stairs_rounded,
                                 color: AppColors.secondary,
@@ -790,8 +795,8 @@ class HomeScreen extends ConsumerWidget {
                         // Action Cards (Progress & History)
                         _buildKidActionCard(
                           context,
-                          title: 'My Progress Reports',
-                          subtitle: 'View your speech progress charts and milestones',
+                          title: 'My Progress Reports'.tr(),
+                          subtitle: 'View your speech progress charts and milestones'.tr(),
                           icon: Icons.insights_rounded,
                           color: AppColors.primary,
                           onTap: () => context.pushNamed(
@@ -804,8 +809,8 @@ class HomeScreen extends ConsumerWidget {
 
                         _buildKidActionCard(
                           context,
-                          title: 'Speech Practice History',
-                          subtitle: 'View stars and feedback from your past sessions',
+                          title: 'Speech Practice History'.tr(),
+                          subtitle: 'View stars and feedback from your past sessions'.tr(),
                           icon: Icons.history_rounded,
                           color: AppColors.secondary,
                           onTap: () => context.pushNamed(

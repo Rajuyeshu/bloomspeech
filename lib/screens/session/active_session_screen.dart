@@ -10,17 +10,28 @@ import '../../config/theme/app_text_styles.dart';
 import '../../config/routes/app_router.dart';
 import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
+import '../../services/crash_log.dart';
 import '../../services/firestore_service.dart';
 import '../../services/audio_service.dart';
 import '../../services/video_call_service.dart';
 import '../../models/session.dart';
 import '../../utils/bilingual_phrases.dart';
+import '../../utils/app_localizations.dart';
+import '../../services/language_service.dart';
 import '../../widgets/embedded_video_call.dart';
 import '../../widgets/theme_token_board.dart';
 import 'session_setup_screen.dart';
 
 /// Active session state
 final activeSessionProvider = StateProvider<ActiveSessionState?>((ref) => null);
+
+/// The result of recording one utterance: the next state, and whether that
+/// utterance completed a reward cycle.
+class TokenOutcome {
+  final ActiveSessionState state;
+  final bool goalReached;
+  const TokenOutcome({required this.state, required this.goalReached});
+}
 
 class ActiveSessionState {
   final SessionConfig config;
@@ -42,6 +53,70 @@ class ActiveSessionState {
     this.showingReward = false,
     this.lastFeedbackType,
   });
+
+  /// Record one fluent utterance.
+  ///
+  /// Extracted from the button handler so the response-cost arithmetic — the
+  /// clinical heart of the app — can be tested without a widget tree, an
+  /// audio device or a network round trip.
+  TokenOutcome recordFluent({DateTime? at}) {
+    final now = at ?? DateTime.now();
+    final newTokens = currentTokens + config.tokensPerFluent;
+    final utterance = Utterance(
+      id: now.millisecondsSinceEpoch.toString(),
+      timestamp: now,
+      type: UtteranceType.fluent,
+      // Deliberately the pre-reset figure: the record is of what the child
+      // earned, not of the board being cleared for the next cycle.
+      tokenCountAfter: newTokens,
+    );
+    final withUtterance = [...utterances, utterance];
+
+    if (newTokens >= config.tokenGoal) {
+      return TokenOutcome(
+        state: copyWith(
+          currentTokens: 0,
+          utterances: withUtterance,
+          rewardCycles: rewardCycles + 1,
+          showingReward: true,
+          lastFeedbackType: 'fluent',
+        ),
+        goalReached: true,
+      );
+    }
+
+    return TokenOutcome(
+      state: copyWith(
+        currentTokens: newTokens,
+        utterances: withUtterance,
+        lastFeedbackType: 'fluent',
+      ),
+      goalReached: false,
+    );
+  }
+
+  /// Record one dysfluent utterance. The token count is the response cost and
+  /// must never fall below zero — a negative board would be both meaningless
+  /// to the child and impossible to draw.
+  TokenOutcome recordDysfluent({DateTime? at}) {
+    final now = at ?? DateTime.now();
+    final newTokens = max(0, currentTokens - config.tokensPerDysfluent);
+    final utterance = Utterance(
+      id: now.millisecondsSinceEpoch.toString(),
+      timestamp: now,
+      type: UtteranceType.dysfluent,
+      tokenCountAfter: newTokens,
+    );
+
+    return TokenOutcome(
+      state: copyWith(
+        currentTokens: newTokens,
+        utterances: [...utterances, utterance],
+        lastFeedbackType: 'dysfluent',
+      ),
+      goalReached: false,
+    );
+  }
 
   ActiveSessionState copyWith({
     SessionConfig? config,
@@ -80,6 +155,8 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
   late AnimationController _feedbackAnimController;
   late AnimationController _tokenAnimController;
   Timer? _sessionTimer;
+  /// Monotonic — unaffected by device clock or time-zone changes.
+  final Stopwatch _sessionStopwatch = Stopwatch();
   Duration _elapsedTime = Duration.zero;
   String? _feedbackMessage;
   bool _showFeedback = false;
@@ -92,12 +169,32 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
   bool _kidVideoMuted = false;
 
   /// Writes a control flag to the session row; the kid's device polls it.
-  void _setKidCallFlag(String key, bool value) {
+  /// Push a call-control flag to the child's device.
+  ///
+  /// Awaited and checked. This used to be fire-and-forget over a method that
+  /// swallowed its own errors, so a failed write left the clinician in the
+  /// video call alone with no indication that the child had never been told to
+  /// join — which looks exactly like "video only works on one device".
+  Future<void> _setKidCallFlag(String key, bool value) async {
     final code = ref.read(activeSessionProvider)?.sessionCode;
     if (code == null) return;
-    ref
+
+    final ok = await ref
         .read(firestoreServiceProvider)
         .updateActiveSession(sessionCode: code, data: {key: value});
+
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 6),
+          content: Text(
+            "Could not reach the child's device — they may not join the "
+            'video call. Check your connection.'.tr(),
+          ),
+        ),
+      );
+    }
   }
 
   String _generateSessionCode() {
@@ -125,6 +222,15 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     // Initialize session state
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final config = ref.read(sessionConfigProvider);
+
+      // Render the feedback phrases to audio before the first utterance. The
+      // first use of a phrase otherwise pays the synthesis cost inline, which
+      // is audible as a lag between the clinician's tap and the child hearing
+      // it — and in a response-contingent treatment that delay is the thing
+      // that weakens the contingency.
+      if (config != null) {
+        unawaited(ref.read(audioServiceProvider).warmUp(config.language));
+      }
       final currentSessionState = ref.read(activeSessionProvider);
       final user = ref.read(currentUserProvider);
 
@@ -137,19 +243,21 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
           );
           // Save fallback to Supabase
           if (user != null) {
-            final activeSession = ActiveSession(
+            final activeSession = ActiveSession.fromConfig(
+              currentSessionState.config,
               sessionCode: code,
               clinicianId: user.uid,
-              childId: currentSessionState.config.childId,
-              childName: currentSessionState.config.childName,
-              tokenGoal: currentSessionState.config.tokenGoal,
-              therapyLevel: currentSessionState.config.therapyLevel,
-              playTheme: currentSessionState.config.playTheme,
-              miniGame: currentSessionState.config.miniGame,
-              tokensPerFluent: currentSessionState.config.tokensPerFluent,
-              tokensPerDysfluent: currentSessionState.config.tokensPerDysfluent,
             );
-            await ref.read(firestoreServiceProvider).createActiveSession(activeSession);
+            // A failure here means the child can never join this code; the
+            // clinician needs to know rather than read out a dead code.
+            try {
+              await ref
+                  .read(firestoreServiceProvider)
+                  .createActiveSession(activeSession);
+            } catch (e) {
+              debugPrint('createActiveSession failed: $e');
+              _warnSessionNotShared();
+            }
           }
         }
       } else if (config != null) {
@@ -161,30 +269,33 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
         );
         // Save fallback to Supabase
         if (user != null) {
-          final activeSession = ActiveSession(
+          final activeSession = ActiveSession.fromConfig(
+            config,
             sessionCode: code,
             clinicianId: user.uid,
-            childId: config.childId,
-            childName: config.childName,
-            tokenGoal: config.tokenGoal,
-            therapyLevel: config.therapyLevel,
-            playTheme: config.playTheme,
-            miniGame: config.miniGame,
-            tokensPerFluent: config.tokensPerFluent,
-            tokensPerDysfluent: config.tokensPerDysfluent,
           );
-          await ref.read(firestoreServiceProvider).createActiveSession(activeSession);
+          // A failure here means the child can never join this code; the
+          // clinician needs to know rather than read out a dead code.
+          try {
+            await ref
+                .read(firestoreServiceProvider)
+                .createActiveSession(activeSession);
+          } catch (e) {
+            debugPrint('createActiveSession failed: $e');
+            _warnSessionNotShared();
+          }
         }
       }
     });
 
-    // Start elapsed time timer
+    // Elapsed time comes from a monotonic Stopwatch, not from subtracting
+    // wall-clock times. Subtracting `DateTime.now()` meant that changing the
+    // device clock or time zone mid-session made the timer jump — or run
+    // negative, which then produced a negative stored duration.
+    _sessionStopwatch.start();
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
-        setState(() {
-          _elapsedTime = DateTime.now().difference(
-              ref.read(activeSessionProvider)?.startTime ?? DateTime.now());
-        });
+        setState(() => _elapsedTime = _sessionStopwatch.elapsed);
       }
     });
   }
@@ -195,42 +306,58 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     _feedbackAnimController.dispose();
     _tokenAnimController.dispose();
     _sessionTimer?.cancel();
+    _sessionStopwatch.stop();
     super.dispose();
+  }
+
+  /// Warn that the child's own progress screens will not show this session.
+  ///
+  /// The session itself is still saved against the child record, so the
+  /// clinician loses nothing — it is the child's view that stays empty.
+  void _warnProgressNotLinked(bool columnMissing) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 9),
+        content: Text(
+          columnMissing
+              ? 'Saved, but your database is missing the kid_user_id column, '
+                  'so no child device can be linked. Run '
+                  'supabase_setup_all.sql.'
+              : "Saved, but this child's own device could not be linked — "
+                  'their progress screen will stay empty. See Settings › Data '
+                  'Diagnostics.',
+        ),
+      ),
+    );
+  }
+
+  /// Tell the clinician the session code will not reach the child's device.
+  void _warnSessionNotShared() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 6),
+        content: Text(
+          'This session could not be shared — the child will not be able to '
+          'join with this code.'.tr(),
+        ),
+      ),
+    );
   }
 
   void _onSmooth() {
     final state = ref.read(activeSessionProvider);
     if (state == null) return;
 
-    final newTokens =
-        state.currentTokens + state.config.tokensPerFluent;
-    final utterance = Utterance(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      timestamp: DateTime.now(),
-      type: UtteranceType.fluent,
-      tokenCountAfter: newTokens,
-    );
+    final outcome = state.recordFluent();
+    ref.read(activeSessionProvider.notifier).state = outcome.state;
 
-    final newUtterances = [...state.utterances, utterance];
-
-    // Check if goal reached
-    if (newTokens >= state.config.tokenGoal) {
-      // Reward!
+    if (outcome.goalReached) {
       _confettiController.play();
-      ref.read(activeSessionProvider.notifier).state = state.copyWith(
-        currentTokens: 0,
-        utterances: newUtterances,
-        rewardCycles: state.rewardCycles + 1,
-        showingReward: true,
-        lastFeedbackType: 'fluent',
-      );
       _showRewardScreen();
-    } else {
-      ref.read(activeSessionProvider.notifier).state = state.copyWith(
-        currentTokens: newTokens,
-        utterances: newUtterances,
-        lastFeedbackType: 'fluent',
-      );
     }
 
     _showFeedbackOverlay(true);
@@ -244,10 +371,12 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
       state.config.language,
     );
     ref.read(audioServiceProvider).playSmoothFeedback(
-          phrase: phrase.isNotEmpty
-              ? phrase
-              : 'Wow, that was smooth speech!',
+          phrase: phrase.isNotEmpty ? phrase : 'Wow, that was smooth speech!',
           languageCode: state.config.language,
+          // Spoken instead if the device has no voice for the session
+          // language: an English phrase the child can understand beats
+          // Kannada text read by an English voice.
+          fallbackPhrase: BilingualPhrases.getPhrase(phrases, key, 'en'),
         );
 
     // Sync to Firestore for dual-device
@@ -258,19 +387,8 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     final state = ref.read(activeSessionProvider);
     if (state == null) return;
 
-    final newTokens = max(0, state.currentTokens - state.config.tokensPerDysfluent);
-    final utterance = Utterance(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      timestamp: DateTime.now(),
-      type: UtteranceType.dysfluent,
-      tokenCountAfter: newTokens,
-    );
-
-    ref.read(activeSessionProvider.notifier).state = state.copyWith(
-      currentTokens: newTokens,
-      utterances: [...state.utterances, utterance],
-      lastFeedbackType: 'dysfluent',
-    );
+    ref.read(activeSessionProvider.notifier).state =
+        state.recordDysfluent().state;
 
     _showFeedbackOverlay(false);
 
@@ -283,10 +401,12 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
       state.config.language,
     );
     ref.read(audioServiceProvider).playBumpyFeedback(
-          phrase: phrase.isNotEmpty
-              ? phrase
-              : 'Oh, that was a bumpy one! Try again!',
+          phrase: phrase.isNotEmpty ? phrase : 'Oh, that was a bumpy one! Try again!',
           languageCode: state.config.language,
+          // Spoken instead if the device has no voice for the session
+          // language: an English phrase the child can understand beats
+          // Kannada text read by an English voice.
+          fallbackPhrase: BilingualPhrases.getPhrase(phrases, key, 'en'),
         );
 
     _syncToFirestore();
@@ -310,7 +430,13 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
   }
 
   void _showRewardScreen() {
-    // Signal reward active to kid's device via Supabase
+    // The reward and its mini-game belong to the child. The clinician stays on
+    // the session screen — they need the Smooth/Bumpy controls and the token
+    // board while the child plays, and a full-screen game on the clinician's
+    // device serves no clinical purpose.
+    //
+    // The flags below are what the child's device polls to open the reward.
+    // The child clears them when they finish, so this side never navigates.
     final state = ref.read(activeSessionProvider);
     if (state?.sessionCode != null) {
       ref.read(firestoreServiceProvider).updateActiveSession(
@@ -324,31 +450,24 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
       );
     }
 
-    // Navigate to reward screen after a brief delay
-    Future.delayed(const Duration(milliseconds: 500), () async {
-      if (mounted) {
-        final currentConfig = ref.read(activeSessionProvider)?.config;
-        await context.pushNamed(
-          AppRouter.reward,
-          queryParameters: {
-            'miniGame': currentConfig?.miniGame ?? 'bubbleBurst',
-          },
-        );
-        // After clinician returns from reward screen, reset the flags
-        final currentState = ref.read(activeSessionProvider);
-        if (currentState?.sessionCode != null) {
-          ref.read(activeSessionProvider.notifier).state =
-              currentState!.copyWith(showingReward: false);
-          ref.read(firestoreServiceProvider).updateActiveSession(
-            sessionCode: currentState.sessionCode!,
-            data: {
-              'rewardActive': false,
-              'miniGameActive': false,
-            },
-          );
-        }
-      }
-    });
+    ref.read(activeSessionProvider.notifier).state =
+        ref.read(activeSessionProvider)?.copyWith(showingReward: false);
+
+    // Tell the clinician what the child is seeing, since they no longer see it.
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.smoothGreen,
+          duration: const Duration(seconds: 4),
+          content: Text(
+            state?.config.rewardType == 'physicalReward'
+                ? '🎁 Goal reached — hand ${state?.config.childName ?? 'the child'} '
+                    'their reward'
+                : '🎉 Reward sent to ${state?.config.childName ?? 'the child'}',
+          ),
+        ),
+      );
+    }
   }
 
   void _syncToFirestore() {
@@ -370,21 +489,21 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('End Session?'),
-        content: const Text(
-          'Are you sure you want to end this therapy session? Session data will be saved.',
+        title: Text('End Session?'.tr()),
+        content: Text(
+          'Are you sure you want to end this therapy session? Session data will be saved.'.tr(),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel'.tr()),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.secondary,
             ),
-            child: const Text('End Session'),
+            child: Text('End Session'.tr()),
           ),
         ],
       ),
@@ -436,23 +555,68 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
     // the kid's own attempt is refused whenever row-level security restricts
     // `children` to its owner, which left the kid's progress permanently empty.
     if (state.sessionCode != null) {
+      // Every branch here used to fail silently — including simply finding no
+      // kid id, which is what happens when `active_sessions.kid_user_id` does
+      // not exist. The session saved, the clinician saw success, and the
+      // child's progress screens stayed empty for good with nothing recorded
+      // anywhere to say why.
       try {
         final active = await ref
             .read(firestoreServiceProvider)
             .fetchActiveSession(state.sessionCode!);
         final kidId = active?.kidUserId;
-        if (kidId != null && kidId.isNotEmpty) {
+
+        if (kidId == null || kidId.isEmpty) {
+          // Two very different situations produce a null id, and conflating
+          // them is why this took several rounds to pin down.
+          final columnMissing = active != null && !active.kidUserIdColumnPresent;
+          final noDeviceJoined = active != null && active.kidUserIdColumnPresent;
+
+          final String reason;
+          if (columnMissing) {
+            reason = 'active_sessions.kid_user_id does not exist in this '
+                'database. Run supabase_setup_all.sql in the Supabase SQL '
+                'editor; until then no child device can be linked.';
+          } else if (noDeviceJoined) {
+            reason = 'The column exists and is empty: no child device joined '
+                'this session with the code. Nothing is wrong if you were '
+                'testing alone.';
+          } else {
+            reason = 'The session row could not be read back at save time, so '
+                'the child could not be linked.';
+          }
+
+          debugPrint('linkKidToChild skipped — $reason');
+          CrashLog.record(
+              columnMissing
+                  ? 'Database missing kid_user_id column'
+                  : noDeviceJoined
+                      ? 'No child device joined this session'
+                      : 'Kid not linked to child',
+              StackTrace.fromString(reason));
+
+          // A session the clinician ran alone is not a failure and must not be
+          // reported as one — that warning appearing on every solo test is
+          // what made the real problem hard to see.
+          if (!noDeviceJoined) _warnProgressNotLinked(columnMissing);
+        } else {
           await ref.read(firestoreServiceProvider).linkKidToChild(
                 childId: state.config.childId,
                 kidUserId: kidId,
               );
         }
-      } catch (e) {
+      } catch (e, stack) {
         debugPrint('Linking kid to child on save failed: $e');
+        CrashLog.record('Kid not linked to child: $e', stack);
+        // A thrown error is never the missing-column case; that is detected
+        // from the row itself above.
+        _warnProgressNotLinked(false);
       }
     }
 
-    final duration = DateTime.now().difference(state.startTime);
+    // Same monotonic source as the on-screen timer, so a clock change
+    // during the session cannot record a wrong or negative duration.
+    final duration = _sessionStopwatch.elapsed;
     final stats = SessionStats.calculate(
       utterances: state.utterances,
       rewardCycles: state.rewardCycles,
@@ -519,9 +683,11 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(activeSessionProvider);
+    // Rebuild this screen when the interface language changes.
+    ref.watch(appLanguageProvider);
     if (state == null) {
-      return const Scaffold(
-        body: Center(child: Text('No active session')),
+      return Scaffold(
+        body: Center(child: Text('No active session'.tr())),
       );
     }
 
@@ -662,7 +828,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                               iconSize: screenWidth < 400 ? 22 : 28,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              tooltip: 'Toggle Video Call',
+                              tooltip: 'Toggle Video Call'.tr(),
                             ),
                           ],
   
@@ -676,7 +842,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                             iconSize: screenWidth < 400 ? 24 : 28,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
-                            tooltip: 'End Session',
+                            tooltip: 'end_session'.tr(),
                           ),
                         ],
                       ),
@@ -713,12 +879,12 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         _buildStatPill(
-                          'Fluent',
+                          'Fluent Word',
                           '${state.utterances.where((u) => u.type == UtteranceType.fluent).length}',
                           AppColors.smoothGreen,
                         ),
                         _buildStatPill(
-                          'Bumpy',
+                          'Stuttered Word',
                           '${state.utterances.where((u) => u.type == UtteranceType.dysfluent).length}',
                           AppColors.bumpyOrange,
                         ),
@@ -732,7 +898,67 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                   ),
 
                   // ─── Embedded Video Call (inline, below token board) ───
-                  if (_showEmbeddedVideoCall && state.sessionCode != null) ...[
+                  //
+                  // Collapsed for in-person ("offline") sessions: the panel is
+                  // replaced by a slim bar rather than left as dead space, so
+                  // the token board and Smooth/Bumpy controls get the room.
+                  // The tall video panel appears only once a call is actually
+                  // running. Before that — an in-person ("offline") session, or
+                  // before the clinician starts video — it collapses to this
+                  // one-line bar. The old behaviour rendered a 180px dark
+                  // "Join Video Call" card at all times, which wasted the space
+                  // an in-person session needs and clipped its own button.
+                  if (state.sessionCode != null &&
+                      (!_showEmbeddedVideoCall || !_kidVideoStarted))
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                      child: InkWell(
+                        onTap: () {
+                          // Tapping the bar starts the call for both sides.
+                          setState(() {
+                            _showEmbeddedVideoCall = true;
+                            _kidVideoStarted = true;
+                          });
+                          _setKidCallFlag('kidVideoStarted', true);
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceVariant,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.videocam_off_rounded,
+                                  size: 16, color: AppColors.textSecondary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _showEmbeddedVideoCall
+                                      ? 'Video call not started'.tr()
+                                      : 'In-person session — video off'.tr(),
+                                  style: AppTextStyles.labelSmall.copyWith(
+                                      color: AppColors.textSecondary),
+                                ),
+                              ),
+                              Text(
+                                'Start'.tr(),
+                                style: AppTextStyles.labelSmall.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  if (_showEmbeddedVideoCall &&
+                      _kidVideoStarted &&
+                      state.sessionCode != null) ...[
                     Container(
                       height: isSmallScreen ? 130 : 180,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -790,7 +1016,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Smooth',
+                                    'smooth'.tr(),
                                     style:
                                         AppTextStyles.buttonText.copyWith(
                                       fontSize: isSmallScreen ? 14 : 16,
@@ -839,7 +1065,7 @@ class _ActiveSessionScreenState extends ConsumerState<ActiveSessionScreen>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Bumpy',
+                                    'bumpy'.tr(),
                                     style:
                                         AppTextStyles.buttonText.copyWith(
                                       fontSize: isSmallScreen ? 14 : 16,

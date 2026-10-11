@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
+import '../../utils/auth_error.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,6 +27,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscureConfirm = true;
   bool _isLoading = false;
   String? _errorMessage;
+  AuthErrorAction _errorAction = AuthErrorAction.none;
 
   @override
   void dispose() {
@@ -41,10 +44,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _errorAction = AuthErrorAction.none;
     });
 
     try {
-      final user = await ref.read(authServiceProvider).registerWithEmail(
+      final result = await ref.read(authServiceProvider).registerWithEmail(
             email: _emailController.text.trim(),
             password: _passwordController.text,
             displayName: _nameController.text.trim(),
@@ -52,17 +56,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
       // Create clinician profile in Supabase
       await ref.read(firestoreServiceProvider).setClinicianProfile(
-            userId: user.uid,
+            userId: result.user.uid,
             name: _nameController.text.trim(),
             email: _emailController.text.trim(),
           );
 
-      if (mounted) {
-        context.goNamed(AppRouter.home);
+      if (!mounted) return;
+
+      if (result.needsEmailConfirmation) {
+        // The account exists but has no session, so navigating to the home
+        // screen only bounced back to login with nothing to explain it. Say
+        // what happened and what to do about it.
+        setState(() {
+          _errorMessage =
+              'Account created. Open the confirmation link we sent to '
+              '${_emailController.text.trim()} — it will bring you back here '
+              'and sign you in.';
+          _errorAction = AuthErrorAction.signIn;
+        });
+        return;
       }
+
+      context.goNamed(AppRouter.home);
     } catch (e) {
+      // Showing e.toString() here put raw exception text in front of the user
+      // — "AuthApiException(message: User already registered, statusCode:
+      // 422…)" — which reads as a fault in the app rather than as "you already
+      // have an account, sign in instead".
+      final mapped = AuthError.from(e);
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = mapped.message;
+        _errorAction = mapped.action;
       });
     } finally {
       if (mounted) {
@@ -135,12 +159,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           ),
                       const SizedBox(height: 20),
                       Text(
-                        'Create Account',
+                        'Create Account'.tr(),
                         style: AppTextStyles.headlineLarge,
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Join BloomSpeech as a clinician',
+                        'Join BloomSpeech as a clinician'.tr(),
                         style: AppTextStyles.bodyMedium
                             .copyWith(color: AppColors.textSecondary),
                       ),
@@ -157,14 +181,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Name Field
-                      Text('Full Name', style: AppTextStyles.labelLarge),
+                      Text('Full Name'.tr(), style: AppTextStyles.labelLarge),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _nameController,
                         textInputAction: TextInputAction.next,
                         textCapitalization: TextCapitalization.words,
                         decoration: InputDecoration(
-                          hintText: 'Dr. / SLP Name',
+                          hintText: 'Dr. / SLP Name'.tr(),
                           prefixIcon: const Icon(Icons.person_outline),
                           filled: true,
                           fillColor: AppColors.surface,
@@ -192,14 +216,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: 18),
 
                       // Email Field
-                      Text('Email', style: AppTextStyles.labelLarge),
+                      Text('Email'.tr(), style: AppTextStyles.labelLarge),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
                         decoration: InputDecoration(
-                          hintText: 'your.email@example.com',
+                          hintText: 'your.email@example.com'.tr(),
                           prefixIcon: const Icon(Icons.email_outlined),
                           filled: true,
                           fillColor: AppColors.surface,
@@ -231,14 +255,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: 18),
 
                       // Password Field
-                      Text('Password', style: AppTextStyles.labelLarge),
+                      Text('Password'.tr(), style: AppTextStyles.labelLarge),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
                         textInputAction: TextInputAction.next,
                         decoration: InputDecoration(
-                          hintText: 'At least 6 characters',
+                          hintText: 'At least 6 characters'.tr(),
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -278,7 +302,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: 18),
 
                       // Confirm Password
-                      Text('Confirm Password', style: AppTextStyles.labelLarge),
+                      Text('Confirm Password'.tr(), style: AppTextStyles.labelLarge),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _confirmPasswordController,
@@ -286,7 +310,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _handleRegister(),
                         decoration: InputDecoration(
-                          hintText: 'Re-enter password',
+                          hintText: 'Re-enter password'.tr(),
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -335,10 +359,43 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   color: AppColors.error, size: 20),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: AppTextStyles.bodySmall
-                                      .copyWith(color: AppColors.error),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _errorMessage!,
+                                      style: AppTextStyles.bodySmall
+                                          .copyWith(color: AppColors.error),
+                                    ),
+                                    // A failure with an obvious remedy should
+                                    // offer it, rather than leaving the user to
+                                    // retype the same form and fail again.
+                                    if (_errorAction ==
+                                        AuthErrorAction.signIn) ...[
+                                      const SizedBox(height: 4),
+                                      TextButton(
+                                        onPressed: () => context
+                                            .goNamed(AppRouter.login),
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          visualDensity:
+                                              VisualDensity.compact,
+                                          tapTargetSize: MaterialTapTargetSize
+                                              .shrinkWrap,
+                                        ),
+                                        child: Text(
+                                          'Go to sign in'.tr(),
+                                          style: AppTextStyles.bodySmall
+                                              .copyWith(
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ],
@@ -373,7 +430,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   ),
                                 )
                               : Text(
-                                  'Create Account',
+                                  'Create Account'.tr(),
                                   style: AppTextStyles.buttonText,
                                 ),
                         ),
@@ -387,7 +444,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              'Already have an account? ',
+                              'Already have an account? '.tr(),
                               style: AppTextStyles.bodyMedium.copyWith(
                                 color: AppColors.textSecondary,
                               ),
@@ -395,7 +452,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             GestureDetector(
                               onTap: () => context.goNamed(AppRouter.login),
                               child: Text(
-                                'Sign In',
+                                'Sign In'.tr(),
                                 style: AppTextStyles.labelLarge.copyWith(
                                   color: AppColors.primary,
                                 ),

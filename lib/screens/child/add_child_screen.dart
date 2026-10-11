@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -20,6 +21,7 @@ class AddChildScreen extends ConsumerStatefulWidget {
 class _AddChildScreenState extends ConsumerState<AddChildScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _baselineController = TextEditingController();
   DateTime? _dateOfBirth;
   String _gender = 'male';
   bool _isLoading = false;
@@ -48,6 +50,10 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
         _nameController.text = child.name;
         _dateOfBirth = child.dateOfBirth;
         _gender = child.gender;
+        if (child.baselineDysfluencyPct != null) {
+          _baselineController.text =
+              child.baselineDysfluencyPct!.toStringAsFixed(1);
+        }
       });
     }
   }
@@ -55,6 +61,7 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _baselineController.dispose();
     super.dispose();
   }
 
@@ -86,7 +93,7 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_dateOfBirth == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select date of birth')),
+        SnackBar(content: Text('Please select date of birth'.tr())),
       );
       return;
     }
@@ -105,6 +112,8 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
         gender: _gender,
         enrollmentDate: DateTime.now(),
         clinicianId: clinicianId,
+        baselineDysfluencyPct:
+            double.tryParse(_baselineController.text.trim()),
       );
 
       try {
@@ -116,6 +125,7 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
                   'name': child.name,
                   'dateOfBirth': child.dateOfBirth,
                   'gender': child.gender,
+                  'baselineDysfluencyPct': child.baselineDysfluencyPct,
                 },
               );
         } else {
@@ -124,8 +134,19 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
                 child: child,
               );
         }
-      } catch (_) {
-        // Fallback for offline / local demo testing mode
+      } catch (e) {
+        // This used to be swallowed, so a failed save still showed
+        // "Child added!" and the clinician discovered the loss later.
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppColors.error,
+              content: Text('Could not save: $e'),
+            ),
+          );
+        }
+        return;
       }
 
       if (mounted) {
@@ -209,14 +230,14 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
               const SizedBox(height: 32),
 
               // Name
-              Text('Child\'s Name', style: AppTextStyles.labelLarge),
+              Text('Child\'s Name'.tr(), style: AppTextStyles.labelLarge),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _nameController,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  hintText: 'Enter child\'s full name',
-                  prefixIcon: Icon(Icons.person_outline),
+                decoration: InputDecoration(
+                  hintText: 'Enter child\'s full name'.tr(),
+                  prefixIcon: const Icon(Icons.person_outline),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -229,7 +250,7 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
               const SizedBox(height: 24),
 
               // Date of Birth
-              Text('Date of Birth', style: AppTextStyles.labelLarge),
+              Text('Date of Birth'.tr(), style: AppTextStyles.labelLarge),
               const SizedBox(height: 8),
               GestureDetector(
                 onTap: _pickDateOfBirth,
@@ -253,6 +274,8 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
                       const SizedBox(width: 12),
                       Text(
                         _dateOfBirth != null
+                            // Calendar date, not an instant: formatted as
+                            // picked. Shifting it to IST could move it a day.
                             ? DateFormat('dd MMM yyyy').format(_dateOfBirth!)
                             : 'Select date of birth',
                         style: _dateOfBirth != null
@@ -288,7 +311,7 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
               const SizedBox(height: 24),
 
               // Gender
-              Text('Gender', style: AppTextStyles.labelLarge),
+              Text('Gender'.tr(), style: AppTextStyles.labelLarge),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -299,6 +322,38 @@ class _AddChildScreenState extends ConsumerState<AddChildScreen> {
                   _buildGenderOption(
                       'other', 'Other', Icons.child_care_rounded),
                 ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Baseline stuttering frequency
+              Text('Baseline stuttering frequency (%)'.tr(),
+                  style: AppTextStyles.labelLarge),
+              const SizedBox(height: 4),
+              Text(
+                'Optional. Measured before treatment began; later sessions '
+                    'are compared against it.'
+                    .tr(),
+                style: AppTextStyles.bodySmall
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _baselineController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  hintText: 'e.g. 12.5',
+                  prefixIcon: Icon(Icons.percent_rounded),
+                ),
+                validator: (value) {
+                  final raw = value?.trim() ?? '';
+                  if (raw.isEmpty) return null; // optional
+                  final v = double.tryParse(raw);
+                  if (v == null) return 'Enter a number, or leave blank';
+                  if (v < 0 || v > 100) return 'Must be between 0 and 100';
+                  return null;
+                },
               ),
 
               const SizedBox(height: 40),

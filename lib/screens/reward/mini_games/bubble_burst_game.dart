@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../../../utils/app_localizations.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../config/theme/app_colors.dart';
@@ -75,7 +76,7 @@ class _BubbleBurstGameState extends State<BubbleBurstGame> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('🎉 Great Job!'),
+        title: Text('🎉 Great Job!'.tr()),
         content: Text('You popped $_score bubbles!',
             style: AppTextStyles.bodyLarge),
         actions: [
@@ -84,7 +85,7 @@ class _BubbleBurstGameState extends State<BubbleBurstGame> {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: const Text('Done'),
+            child: Text('Done'.tr()),
           ),
         ],
       ),

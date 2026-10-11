@@ -5,6 +5,8 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../utils/bilingual_phrases.dart';
+
 /// Audio service for feedback chimes and TTS
 class AudioService {
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -62,14 +64,17 @@ class AudioService {
   }
 
   /// Play a feedback chime sound.
-  /// Returns false when the asset is missing so callers can skip the pause
-  /// that exists only to let the chime finish. `assets/audio/` currently ships
-  /// empty, so this is the normal path rather than an exceptional one.
+  ///
+  /// Returns false if the asset can't play, so callers skip the pause that
+  /// only exists to let the chime finish. The chimes are short generated
+  /// tones: a bright rising arpeggio for fluent speech, and a soft, low
+  /// two-note fall for dysfluent — deliberately gentle rather than a buzzer,
+  /// since the child should not hear it as punishment.
   Future<bool> playChime({required bool isSmooth}) async {
     try {
       final asset = isSmooth
-          ? 'audio/smooth_chime.mp3'
-          : 'audio/bumpy_chime.mp3';
+          ? 'audio/smooth_chime.wav'
+          : 'audio/bumpy_chime.wav';
       await _audioPlayer.play(AssetSource(asset));
       return true;
     } catch (e) {
@@ -81,28 +86,94 @@ class AudioService {
   /// Play celebration sound for rewards
   Future<void> playCelebration() async {
     try {
-      await _audioPlayer.play(AssetSource('audio/celebration.mp3'));
+      await _audioPlayer.play(AssetSource('audio/celebration.wav'));
     } catch (_) {}
   }
 
-  /// Speak text using TTS
+  /// Whether this device can actually speak the therapy language.
+  ///
+  /// Null until probed. Exposed so a screen can warn the clinician that the
+  /// child will hear English — a silent substitution would otherwise look like
+  /// the language setting being ignored.
+  bool? get kannadaVoiceAvailable => _voiceAvailable['kn-IN'];
+
+  final Map<String, bool> _voiceAvailable = {};
+
+  /// Probe once per locale. `isLanguageAvailable` is a platform channel call,
+  /// and running it before every phrase added latency to feedback that has to
+  /// follow the child's utterance closely.
+  Future<bool> _hasVoice(String locale) async {
+    final cached = _voiceAvailable[locale];
+    if (cached != null) return cached;
+    try {
+      final ok = await _flutterTts.isLanguageAvailable(locale) == true;
+      _voiceAvailable[locale] = ok;
+      return ok;
+    } catch (e) {
+      debugPrint('TTS availability check failed for $locale: $e');
+      _voiceAvailable[locale] = false;
+      return false;
+    }
+  }
+
+  /// Synthesise the feedback phrases ahead of the first utterance.
+  ///
+  /// The first time a phrase is spoken it must be rendered to a file, which on
+  /// a mid-range device takes long enough to be audible as a lag between the
+  /// clinician's tap and the child's feedback. Warming the cache at session
+  /// start moves that cost off the response-contingent path, where immediacy
+  /// is the entire point of the treatment.
+  Future<void> warmUp(String languageCode) async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    await initialize();
+    final locale = await _resolveLocale(languageCode);
+    for (final entry in BilingualPhrases.feedback.values) {
+      final text = entry[languageCode] ?? entry['en'] ?? '';
+      if (text.trim().isEmpty) continue;
+      try {
+        await _synthesiseToCache(text, locale);
+      } catch (e) {
+        debugPrint('Phrase warm-up failed: $e');
+      }
+    }
+  }
+
+  /// The locale to speak in, falling back when the device has no such voice.
+  Future<String> _resolveLocale(String languageCode) async {
+    if (languageCode == 'kn' && await _hasVoice('kn-IN')) return 'kn-IN';
+    if (await _hasVoice('en-IN')) return 'en-IN';
+    return 'en-US';
+  }
+
+  /// Speak a feedback phrase.
+  ///
+  /// [fallbackText] is spoken instead when the device has no voice for the
+  /// requested language. Passing Kannada text to an English voice does not
+  /// degrade gracefully — it produces sounds that are not words — so the
+  /// English phrase is the better failure.
   Future<void> speak({
     required String text,
     required String languageCode,
+    String? fallbackText,
   }) async {
     if (text.trim().isEmpty) return;
     await initialize();
 
-    // Set language. Many devices ship no kn-IN (or even en-IN) voice; setting
-    // an unavailable locale can leave the engine unable to speak at all, so
-    // fall back rather than losing the phrase entirely.
-    final locale = languageCode == 'kn' ? 'kn-IN' : 'en-IN';
-    try {
-      final available = await _flutterTts.isLanguageAvailable(locale);
-      await _flutterTts.setLanguage(available == true ? locale : 'en-US');
-    } catch (e) {
-      debugPrint('TTS language $locale unavailable, using default: $e');
+    final wantsKannada = languageCode == 'kn';
+    final locale = await _resolveLocale(languageCode);
+    final usingRequested = !wantsKannada || locale == 'kn-IN';
+
+    if (!usingRequested) {
+      debugPrint('No kn-IN voice on this device; speaking the English phrase.');
     }
+    final spoken = usingRequested ? text : (fallbackText ?? text);
+
+    try {
+      await _flutterTts.setLanguage(locale);
+    } catch (e) {
+      debugPrint('TTS setLanguage($locale) failed: $e');
+    }
+    text = spoken;
 
     // On Android, plain TTS is inaudible while Jitsi holds the audio session
     // in communication mode — the engine plays to the media route, which the
@@ -192,21 +263,26 @@ class AudioService {
   Future<void> playSmoothFeedback({
     required String phrase,
     required String languageCode,
+    String? fallbackPhrase,
   }) async {
     final played = await playChime(isSmooth: true);
-    // Small delay so chime plays first — pointless if there was no chime.
-    if (played) await Future.delayed(const Duration(milliseconds: 300));
-    await speak(text: phrase, languageCode: languageCode);
+    // Let the chime land before the phrase, but no longer than it needs — this
+    // sits directly between the child's utterance and its consequence.
+    if (played) await Future.delayed(const Duration(milliseconds: 180));
+    await speak(
+        text: phrase, languageCode: languageCode, fallbackText: fallbackPhrase);
   }
 
   /// Play bumpy feedback (soft sound + speech)
   Future<void> playBumpyFeedback({
     required String phrase,
     required String languageCode,
+    String? fallbackPhrase,
   }) async {
     final played = await playChime(isSmooth: false);
-    if (played) await Future.delayed(const Duration(milliseconds: 300));
-    await speak(text: phrase, languageCode: languageCode);
+    if (played) await Future.delayed(const Duration(milliseconds: 180));
+    await speak(
+        text: phrase, languageCode: languageCode, fallbackText: fallbackPhrase);
   }
 }
 

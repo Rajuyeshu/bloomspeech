@@ -11,6 +11,13 @@ class ChildProfile {
   final int totalSessions;
   final DateTime? lastSessionDate;
 
+  /// Stuttering frequency measured before treatment began, as a percentage.
+  ///
+  /// Null when it has not been recorded. Kept on the child rather than the
+  /// session because it is a single pre-treatment measure that every later
+  /// session is read against.
+  final double? baselineDysfluencyPct;
+
   ChildProfile({
     required this.id,
     required this.name,
@@ -22,6 +29,7 @@ class ChildProfile {
     required this.clinicianId,
     this.totalSessions = 0,
     this.lastSessionDate,
+    this.baselineDysfluencyPct,
   });
 
   /// Calculate age in years from DOB
@@ -53,29 +61,45 @@ class ChildProfile {
     return '$years years $months months';
   }
 
+  /// Parse a value that may arrive as a DateTime, an ISO string, or nothing.
+  /// Returns null for anything unusable so callers choose their own default.
+  /// A percentage, or null. Anything unusable or out of range is discarded
+  /// rather than charted as a nonsense baseline.
+  static double? _pct(dynamic v) {
+    if (v == null) return null;
+    final d = v is num ? v.toDouble() : double.tryParse('$v');
+    if (d == null || !d.isFinite || d < 0 || d > 100) return null;
+    return d;
+  }
+
+  static DateTime? _date(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    return DateTime.tryParse(v.toString());
+  }
+
   /// Create from Map (Supabase / JSON)
   factory ChildProfile.fromMap(Map<String, dynamic> data) {
     return ChildProfile(
       id: data['id'] ?? '',
       name: data['name'] ?? '',
-      dateOfBirth: data['dateOfBirth'] is DateTime
-          ? data['dateOfBirth']
-          : DateTime.tryParse(data['dateOfBirth']?.toString() ?? '') ?? DateTime.now(),
+      // Supabase columns are snake_case and `toMap` writes them that way, but
+      // both of these only ever read the camelCase key. Every child loaded
+      // from the database therefore fell through to DateTime.now() and showed
+      // an age of "0 years" — with no error to point at.
+      dateOfBirth: _date(data['date_of_birth'] ?? data['dateOfBirth']) ??
+          DateTime.now(),
       gender: data['gender'] ?? 'other',
-      enrollmentDate: data['enrollmentDate'] is DateTime
-          ? data['enrollmentDate']
-          : DateTime.tryParse(data['enrollmentDate']?.toString() ?? '') ?? DateTime.now(),
+      enrollmentDate: _date(data['enrollment_date'] ?? data['enrollmentDate']) ??
+          DateTime.now(),
       currentLevel: data['currentLevel'] ?? data['current_level'] ?? 'word',
       photoUrl: data['photoUrl'] ?? data['photo_url'],
       clinicianId: data['clinicianId'] ?? data['clinician_id'] ?? '',
       totalSessions: data['totalSessions'] ?? data['total_sessions'] ?? 0,
-      lastSessionDate: data['lastSessionDate'] != null
-          ? (data['lastSessionDate'] is DateTime
-              ? data['lastSessionDate']
-              : DateTime.tryParse(data['lastSessionDate'].toString()))
-          : (data['last_session_date'] != null
-              ? DateTime.tryParse(data['last_session_date'].toString())
-              : null),
+      lastSessionDate:
+          _date(data['last_session_date'] ?? data['lastSessionDate']),
+      baselineDysfluencyPct: _pct(
+          data['baseline_dysfluency_pct'] ?? data['baselineDysfluencyPct']),
     );
   }
 
@@ -92,6 +116,7 @@ class ChildProfile {
       'clinician_id': clinicianId,
       'total_sessions': totalSessions,
       'last_session_date': lastSessionDate?.toIso8601String(),
+      'baseline_dysfluency_pct': baselineDysfluencyPct,
     };
   }
 
@@ -107,6 +132,7 @@ class ChildProfile {
     String? clinicianId,
     int? totalSessions,
     DateTime? lastSessionDate,
+    double? baselineDysfluencyPct,
   }) {
     return ChildProfile(
       id: id ?? this.id,
@@ -118,6 +144,8 @@ class ChildProfile {
       photoUrl: photoUrl ?? this.photoUrl,
       clinicianId: clinicianId ?? this.clinicianId,
       totalSessions: totalSessions ?? this.totalSessions,
+      baselineDysfluencyPct:
+          baselineDysfluencyPct ?? this.baselineDysfluencyPct,
       lastSessionDate: lastSessionDate ?? this.lastSessionDate,
     );
   }

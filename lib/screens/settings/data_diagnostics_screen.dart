@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../services/crash_log.dart';
+import '../../utils/app_time.dart';
 import '../../config/theme/app_colors.dart';
 import '../../config/theme/app_text_styles.dart';
 import '../../services/auth_service.dart';
@@ -37,11 +39,26 @@ class _DataDiagnosticsScreenState extends ConsumerState<DataDiagnosticsScreen> {
         .runKidDataDiagnostics(user?.uid ?? '');
   }
 
-  String _asText(List<DiagnosticStep> steps) => steps
-      .map((s) => '${s.ok ? "OK  " : "FAIL"}  ${s.name}\n'
-          '  query : ${s.query}\n'
-          '  result: ${s.result}')
-      .join('\n\n');
+  /// The copied report includes the crash records too — those are the part
+  /// that is otherwise impossible to retrieve from a release build.
+  String _asText(List<DiagnosticStep> steps) {
+    final diagnostics = steps
+        .map((s) => '${s.ok ? "OK  " : "FAIL"}  ${s.name}\n'
+            '  query : ${s.query}\n'
+            '  result: ${s.result}')
+        .join('\n\n');
+
+    final crashes = CrashLog.recent();
+    if (crashes.isEmpty) return '$diagnostics\n\nNo crashes recorded.';
+
+    final crashText = crashes
+        .map((c) => '${AppTime.format(c.time, "yyyy-MM-dd HH:mm:ss")} '
+            '${AppTime.istLabel}\n${c.error}\n${c.stack}')
+        .join('\n\n---\n\n');
+
+    return '$diagnostics\n\n'
+        '=== CRASHES (${crashes.length}) ===\n\n$crashText';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +94,7 @@ class _DataDiagnosticsScreenState extends ConsumerState<DataDiagnosticsScreen> {
                 ),
                 const SizedBox(height: 16),
                 ...steps.map(_buildStep),
+                _buildCrashSection(),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () async {
@@ -96,6 +114,73 @@ class _DataDiagnosticsScreenState extends ConsumerState<DataDiagnosticsScreen> {
           },
         ),
       ),
+    );
+  }
+
+  /// Recent uncaught errors, so a crash on a real device leaves something
+  /// readable behind. Without this the only available report is "it crashed",
+  /// which cannot be acted on.
+  Widget _buildCrashSection() {
+    final crashes = CrashLog.recent();
+    if (crashes.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          'No crashes recorded on this device.',
+          style: AppTextStyles.bodySmall
+              .copyWith(color: AppColors.textSecondary),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Recent crashes (${crashes.length})',
+                style: AppTextStyles.titleSmall),
+            TextButton(
+              onPressed: () async {
+                await CrashLog.clear();
+                if (mounted) setState(() {});
+              },
+              child: const Text('Clear'),
+            ),
+          ],
+        ),
+        ...crashes.take(5).map((c) => Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(AppTime.format(c.time, 'd MMM, HH:mm:ss'),
+                      style: AppTextStyles.labelSmall
+                          .copyWith(color: AppColors.textSecondary)),
+                  const SizedBox(height: 4),
+                  Text(c.error,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.error)),
+                  if (c.stack.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      c.stack.split('\n').take(4).join('\n'),
+                      style: const TextStyle(fontSize: 10, height: 1.3),
+                    ),
+                  ],
+                ],
+              ),
+            )),
+      ],
     );
   }
 

@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../../../utils/app_localizations.dart';
 import 'package:flutter/material.dart';
 import '../../../config/theme/app_colors.dart';
 import '../../../config/theme/app_text_styles.dart';
@@ -49,9 +50,9 @@ class _RangoliPaintGameState extends State<RangoliPaintGame> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('🎨 Beautiful Rangoli!'),
+        title: Text('🎨 Beautiful Rangoli!'.tr()),
         content: Text(
-          'You created a wonderful rangoli pattern!',
+          'You created a wonderful rangoli pattern!'.tr(),
           style: AppTextStyles.bodyLarge,
         ),
         actions: [
@@ -60,7 +61,7 @@ class _RangoliPaintGameState extends State<RangoliPaintGame> {
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: const Text('Done'),
+            child: Text('Done'.tr()),
           ),
         ],
       ),
@@ -90,7 +91,7 @@ class _RangoliPaintGameState extends State<RangoliPaintGame> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '🎨 Rangoli Painter',
+                      '🎨 Rangoli Painter'.tr(),
                       style: AppTextStyles.headlineSmall,
                     ),
                     Container(
@@ -178,7 +179,7 @@ class _RangoliPaintGameState extends State<RangoliPaintGame> {
                 ),
                 child: Column(
                   children: [
-                    Text('Pick a color',
+                    Text('Pick a color'.tr(),
                         style: AppTextStyles.labelMedium),
                     const SizedBox(height: 10),
                     Row(
@@ -220,7 +221,7 @@ class _RangoliPaintGameState extends State<RangoliPaintGame> {
               const SizedBox(height: 14),
 
               Text(
-                'Tap petals to color them!',
+                'Tap petals to color them!'.tr(),
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.textSecondary,
                 ),

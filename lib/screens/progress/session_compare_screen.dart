@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../config/routes/app_router.dart';
-import 'package:intl/intl.dart';
 import '../../config/theme/app_colors.dart';
 import '../../config/theme/app_text_styles.dart';
 import '../../config/theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/session.dart';
+import '../../utils/app_time.dart';
 
 class SessionCompareScreen extends ConsumerStatefulWidget {
   final String childId;
@@ -28,13 +29,13 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null) {
-      return const Scaffold(body: Center(child: Text('Login required')));
+      return Scaffold(body: Center(child: Text('Login required'.tr())));
     }
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Compare Sessions'),
+        title: Text('Compare Sessions'.tr()),
         leading: IconButton(
           onPressed: () {
             if (context.canPop()) {
@@ -66,10 +67,10 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                   Icon(Icons.compare_arrows_rounded,
                       size: 60, color: AppColors.textHint.withValues(alpha: 0.3)),
                   const SizedBox(height: 16),
-                  Text('Need at least 2 sessions',
+                  Text('Need at least 2 sessions'.tr(),
                       style: AppTextStyles.headlineSmall),
                   const SizedBox(height: 8),
-                  Text('Complete more sessions to compare',
+                  Text('Complete more sessions to compare'.tr(),
                       style: AppTextStyles.bodyMedium
                           .copyWith(color: AppColors.textSecondary)),
                 ],
@@ -83,7 +84,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Session Selectors
-                Text('Select sessions to compare',
+                Text('Select sessions to compare'.tr(),
                     style: AppTextStyles.titleMedium),
                 const SizedBox(height: 14),
 
@@ -91,7 +92,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                   children: [
                     Expanded(
                       child: _buildSessionSelector(
-                        label: 'Session A',
+                        label: 'Session A'.tr(),
                         selectedSession: _sessionA,
                         sessions: sessions,
                         color: AppColors.primary,
@@ -105,7 +106,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildSessionSelector(
-                        label: 'Session B',
+                        label: 'Session B'.tr(),
                         selectedSession: _sessionB,
                         sessions: sessions,
                         color: AppColors.secondary,
@@ -121,19 +122,20 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                 // Comparison
                 if (_sessionA != null && _sessionB != null) ...[
                   _buildComparisonCard(
-                    'Fluency Rate',
-                    '${_sessionA!.stats.fluencyPercentage.toStringAsFixed(1)}%',
-                    '${_sessionB!.stats.fluencyPercentage.toStringAsFixed(1)}%',
-                    _sessionA!.stats.fluencyPercentage,
-                    _sessionB!.stats.fluencyPercentage,
-                    Icons.trending_up_rounded,
-                    higherIsBetter: true,
+                    'Dysfluency / Stuttering Frequency (%)',
+                    '${_sessionA!.stats.dysfluencyPercentage.toStringAsFixed(1)}%',
+                    '${_sessionB!.stats.dysfluencyPercentage.toStringAsFixed(1)}%',
+                    _sessionA!.stats.dysfluencyPercentage,
+                    _sessionB!.stats.dysfluencyPercentage,
+                    Icons.trending_down_rounded,
+                    // A reduction is the improvement being looked for.
+                    higherIsBetter: false,
                   ).animate().fadeIn(duration: 400.ms),
 
                   const SizedBox(height: 12),
 
                   _buildComparisonCard(
-                    'Total Utterances',
+                    'Total Words Recorded',
                     '${_sessionA!.stats.totalUtterances}',
                     '${_sessionB!.stats.totalUtterances}',
                     _sessionA!.stats.totalUtterances.toDouble(),
@@ -145,7 +147,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                   const SizedBox(height: 12),
 
                   _buildComparisonCard(
-                    'Fluent Count',
+                    'Fluent Words',
                     '${_sessionA!.stats.fluentCount}',
                     '${_sessionB!.stats.fluentCount}',
                     _sessionA!.stats.fluentCount.toDouble(),
@@ -157,7 +159,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                   const SizedBox(height: 12),
 
                   _buildComparisonCard(
-                    'Dysfluent Count',
+                    'Stuttered Words',
                     '${_sessionA!.stats.dysfluentCount}',
                     '${_sessionB!.stats.dysfluentCount}',
                     _sessionA!.stats.dysfluentCount.toDouble(),
@@ -198,7 +200,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        'Select two sessions above to compare',
+                        'Select two sessions above to compare'.tr(),
                         style: AppTextStyles.bodyMedium
                             .copyWith(color: AppColors.textHint),
                       ),
@@ -250,12 +252,12 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                     .copyWith(fontWeight: FontWeight.w700),
               ),
               Text(
-                DateFormat('dd MMM').format(selectedSession.date),
+                AppTime.format(selectedSession.date, 'dd MMM'),
                 style: AppTextStyles.labelSmall,
               ),
             ] else
               Text(
-                'Tap to select',
+                'Tap to select'.tr(),
                 style: AppTextStyles.bodySmall
                     .copyWith(color: AppColors.textHint),
               ),
@@ -281,7 +283,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Select a Session', style: AppTextStyles.headlineSmall),
+              Text('Select a Session'.tr(), style: AppTextStyles.headlineSmall),
               const SizedBox(height: 16),
               Flexible(
                 child: ListView.builder(
@@ -299,7 +301,7 @@ class _SessionCompareScreenState extends ConsumerState<SessionCompareScreen> {
                         ),
                       ),
                       title: Text(
-                        DateFormat('dd MMM yyyy').format(session.date),
+                        AppTime.format(session.date, 'dd MMM yyyy'),
                         style: AppTextStyles.titleSmall,
                       ),
                       subtitle: Text(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,7 +24,7 @@ class SettingsScreen extends ConsumerWidget {
       child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text('Settings'.tr()),
         leading: IconButton(
           onPressed: () {
             if (context.canPop()) {
@@ -93,7 +94,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 28),
 
             // ─── Language Settings ───
-            Text('Language', style: AppTextStyles.headlineSmall),
+            Text('Language'.tr(), style: AppTextStyles.headlineSmall),
             const SizedBox(height: 12),
             _buildSettingCard(
               children: [
@@ -129,7 +130,7 @@ class SettingsScreen extends ConsumerWidget {
                             color: AppColors.primary)
                         : null,
                     onTap: () {
-                      ref.read(appLanguageProvider.notifier).state = lang;
+                      ref.read(appLanguageProvider.notifier).setLanguage(lang);
                     },
                   );
                 }),
@@ -139,7 +140,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // ─── App Info ───
-            Text('App', style: AppTextStyles.headlineSmall),
+            Text('App'.tr(), style: AppTextStyles.headlineSmall),
             const SizedBox(height: 12),
             _buildSettingCard(
               children: [
@@ -166,7 +167,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // ─── About ───
-            Text('About', style: AppTextStyles.headlineSmall),
+            Text('About'.tr(), style: AppTextStyles.headlineSmall),
             const SizedBox(height: 12),
             _buildSettingCard(
               children: [
@@ -181,7 +182,7 @@ class SettingsScreen extends ConsumerWidget {
                     child: const Icon(Icons.description_outlined,
                         color: AppColors.info, size: 20),
                   ),
-                  title: Text('Privacy Policy',
+                  title: Text('Privacy Policy'.tr(),
                       style: AppTextStyles.titleSmall),
                   trailing: const Icon(Icons.arrow_forward_ios_rounded,
                       size: 16, color: AppColors.textHint),
@@ -201,7 +202,7 @@ class SettingsScreen extends ConsumerWidget {
                     child: const Icon(Icons.help_outline_rounded,
                         color: AppColors.accent, size: 20),
                   ),
-                  title: Text('Help & Support',
+                  title: Text('Help & Support'.tr(),
                       style: AppTextStyles.titleSmall),
                   trailing: const Icon(Icons.arrow_forward_ios_rounded,
                       size: 16, color: AppColors.textHint),
@@ -223,7 +224,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   title: Text('Data Diagnostics',
                       style: AppTextStyles.titleSmall),
-                  subtitle: Text('Check why progress may be missing',
+                  subtitle: Text('Check why progress may be missing'.tr(),
                       style: AppTextStyles.labelSmall),
                   trailing: const Icon(Icons.arrow_forward_ios_rounded,
                       size: 16, color: AppColors.textHint),
@@ -243,19 +244,19 @@ class SettingsScreen extends ConsumerWidget {
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
-                      title: const Text('Sign Out'),
-                      content: const Text('Are you sure you want to sign out?'),
+                      title: Text('Sign Out'.tr()),
+                      content: Text('Are you sure you want to sign out?'.tr()),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
+                          child: Text('Cancel'.tr()),
                         ),
                         ElevatedButton(
                           onPressed: () => Navigator.pop(context, true),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.error,
                           ),
-                          child: const Text('Sign Out'),
+                          child: Text('Sign Out'.tr()),
                         ),
                       ],
                     ),
@@ -271,7 +272,7 @@ class SettingsScreen extends ConsumerWidget {
                 icon: const Icon(Icons.logout_rounded,
                     color: AppColors.error, size: 20),
                 label: Text(
-                  'Sign Out',
+                  'Sign Out'.tr(),
                   style: AppTextStyles.buttonText
                       .copyWith(color: AppColors.error),
                 ),

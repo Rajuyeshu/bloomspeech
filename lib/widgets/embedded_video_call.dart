@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../utils/app_localizations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';
@@ -50,6 +51,14 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
   bool _isConnecting = false;
   String? _callError;
   bool _permissionBlocked = false;
+
+  /// Who else Jitsi reports is in the conference.
+  ///
+  /// "I cannot see the other person" has two quite different causes — they
+  /// never joined, or they joined with their camera off — and the call screen
+  /// looks the same either way. Tracking participants lets the status card say
+  /// which it is instead of leaving both sides guessing.
+  final Set<String> _participants = {};
 
   bool get _isAudioMuted => widget.startAudioMuted;
 
@@ -117,6 +126,14 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
   /// Mirrors the real conference lifecycle back into the widget so the card
   /// never claims the call is live after the kid has left it.
   JitsiMeetEventListener get _callListener => JitsiMeetEventListener(
+        participantJoined: (email, name, role, id) {
+          if (!mounted || id == null) return;
+          setState(() => _participants.add(name ?? id));
+        },
+        participantLeft: (id) {
+          if (!mounted || id == null) return;
+          setState(() => _participants.remove(id));
+        },
         conferenceJoined: (_) {
           if (mounted) {
             setState(() {
@@ -131,6 +148,7 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
             setState(() {
               _isCallActive = false;
               _isConnecting = false;
+              _participants.clear();
               _callError = error?.toString();
             });
           }
@@ -243,7 +261,7 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Video Call',
+              'Video Call'.tr(),
               style: AppTextStyles.titleMedium.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -355,6 +373,21 @@ class _EmbeddedVideoCallWidgetState extends State<EmbeddedVideoCallWidget> {
           Text(
             _displayName,
             style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          // Names the other side of the call, so a one-way video problem can be
+          // told apart from the other person never having joined.
+          Text(
+            _participants.isEmpty
+                ? 'Waiting for the other person to join…'
+                : 'In call with: ${_participants.join(', ')}',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _participants.isEmpty
+                  ? Colors.amberAccent
+                  : Colors.greenAccent,
+              fontSize: 11,
+            ),
           ),
           // The tab can be closed or lost behind the app window, and the
           // native call screen can be dismissed — always leave a way back in.

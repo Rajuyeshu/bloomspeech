@@ -7,9 +7,11 @@ import '../../config/theme/app_text_styles.dart';
 import '../../config/routes/app_router.dart';
 import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/forgot_password_dialog.dart';
 import '../../services/language_service.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_localizations.dart';
+import '../../utils/auth_error.dart';
 
 /// Landing screen — choose Clinician or Kid/Patient login
 class LoginScreen extends ConsumerStatefulWidget {
@@ -24,7 +26,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final currentLang = ref.watch(appLanguageProvider);
     final isSelected = currentLang == lang;
     return GestureDetector(
-      onTap: () => ref.read(appLanguageProvider.notifier).state = lang,
+      onTap: () => ref.read(appLanguageProvider.notifier).setLanguage(lang),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -200,24 +202,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   delay: 850,
                 ),
 
-                const SizedBox(height: 40),
-
-                // ─── Decorative footer ───
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildFooterIcon('🪔', 0),
-                    const SizedBox(width: 16),
-                    _buildFooterIcon('🥭', 150),
-                    const SizedBox(width: 16),
-                    _buildFooterIcon('🦚', 300),
-                    const SizedBox(width: 16),
-                    _buildFooterIcon('🌸', 450),
-                    const SizedBox(width: 16),
-                    _buildFooterIcon('🪁', 600),
-                  ],
-                ),
-
+                // The decorative festival icons that sat here were the
+                // retired token imagery, and gave the landing screen a
+                // different visual vocabulary from the rest of the app.
                 const SizedBox(height: 40),
               ],
             ),
@@ -303,12 +290,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         .slideY(begin: 0.15, end: 0);
   }
 
-  Widget _buildFooterIcon(String emoji, int delayMs) {
-    return Text(emoji, style: const TextStyle(fontSize: 24))
-        .animate()
-        .fadeIn(delay: Duration(milliseconds: 1000 + delayMs))
-        .slideY(begin: 0.5, end: 0, duration: 400.ms);
-  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -395,8 +376,15 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
     });
 
     try {
+      // Opens the browser and returns immediately. The session does not exist
+      // yet — it arrives over the deep link once Google redirects back, and
+      // the router sends the user to home when it does.
+      //
+      // This used to navigate to home on the very next line, before any
+      // session existed. The router found no user and bounced straight back
+      // here, which is exactly what "Google sign-in doesn't work" looked like:
+      // a flicker, and no error to explain it.
       await ref.read(authServiceProvider).signInWithGoogle();
-      if (mounted) context.goNamed(AppRouter.home);
     } catch (e) {
       if (mounted) {
         setState(() => _loginError = _friendlyError(e.toString()));
@@ -415,12 +403,21 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
     });
 
     try {
-      await ref.read(authServiceProvider).registerWithEmail(
+      final result = await ref.read(authServiceProvider).registerWithEmail(
             email: _regEmailController.text.trim(),
             password: _regPasswordController.text,
             displayName: _regNameController.text.trim(),
           );
-      if (mounted) context.goNamed(AppRouter.home);
+      if (!mounted) return;
+      if (result.needsEmailConfirmation) {
+        // Account created but not usable yet — going to home would just bounce
+        // back here with no explanation.
+        setState(() => _regError =
+            'Account created. Open the confirmation link in your email — it '
+            'will bring you back here and sign you in.');
+        return;
+      }
+      context.goNamed(AppRouter.home);
     } catch (e) {
       if (mounted) {
         setState(() => _regError = _friendlyError(e.toString()));
@@ -430,30 +427,13 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
     }
   }
 
-  String _friendlyError(String error) {
-    final lower = error.toLowerCase();
-    if (lower.contains('invalid login credentials') ||
-        lower.contains('invalid_credentials') ||
-        lower.contains('wrong-password') ||
-        lower.contains('user-not-found')) {
-      return 'Invalid email or password. Please check your credentials or register a new account.';
-    }
-    if (lower.contains('already registered') ||
-        lower.contains('email-already-in-use') ||
-        lower.contains('user_already_exists')) {
-      return 'An account already exists for this email address. Please sign in.';
-    }
-    if (lower.contains('weak') || lower.contains('at least 6')) {
-      return 'Password should be at least 6 characters long.';
-    }
-    if (lower.contains('invalid email') || lower.contains('invalid-email')) {
-      return 'Please enter a valid email address.';
-    }
-    if (lower.contains('network') || lower.contains('socket')) {
-      return 'Network error. Please check your connection.';
-    }
-    return 'Authentication error: ${error.replaceAll('AuthException(', '').replaceAll(')', '')}';
-  }
+  /// Delegates to the shared mapping in [AuthError].
+  ///
+  /// This existed twice in this file, in two classes, with wording that had
+  /// already drifted apart — and neither copy covered an unconfirmed email, a
+  /// rate limit, or a dropped connection, so those all fell through to raw
+  /// exception text.
+  String _friendlyError(String error) => AuthError.from(error).message;
 
   @override
   Widget build(BuildContext context) {
@@ -529,13 +509,13 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 20),
 
             Center(
-              child: Text('Welcome Back',
+              child: Text('Welcome Back'.tr(),
                   style: AppTextStyles.headlineMedium),
             ),
             const SizedBox(height: 6),
             Center(
               child: Text(
-                'Sign in to your clinician account',
+                'Sign in to your clinician account'.tr(),
                 style: AppTextStyles.bodyMedium
                     .copyWith(color: AppColors.textSecondary),
               ),
@@ -544,7 +524,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 32),
 
             // Email (Username)
-            Text('Email Address (Username)', style: AppTextStyles.labelLarge),
+            Text('Email Address (Username)'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _loginEmailController,
@@ -558,7 +538,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 18),
 
             // Password
-            Text('Password', style: AppTextStyles.labelLarge),
+            Text('Password'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _loginPasswordController,
@@ -578,6 +558,30 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
                   v == null || v.isEmpty ? 'Enter your password' : null,
             ),
 
+            // Forgot password
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => ForgotPasswordDialog.show(
+                  context,
+                  initialEmail: _loginEmailController.text.trim(),
+                  accent: AppColors.primary,
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Forgot Password?'.tr(),
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+
             // Error
             if (_loginError != null) ...[
               const SizedBox(height: 14),
@@ -588,7 +592,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
 
             // Login button
             _buildPrimaryButton(
-              label: 'Login',
+              label: 'Login'.tr(),
               isLoading: _loginLoading,
               onPressed: _handleClinicianLogin,
             ),
@@ -602,7 +606,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Text(
-                    'OR',
+                    'OR'.tr(),
                     style: AppTextStyles.labelMedium.copyWith(
                       color: const Color(0xFF94A3B8),
                       fontSize: 12,
@@ -618,7 +622,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
 
             // Google Login Button
             _buildGoogleButton(
-              label: 'Continue with Google',
+              label: 'Continue with Google'.tr(),
               onPressed: _handleGoogleLogin,
             ),
 
@@ -634,7 +638,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
                           .copyWith(color: AppColors.textSecondary)),
                   GestureDetector(
                     onTap: () => _tabController.animateTo(1),
-                    child: Text('Register',
+                    child: Text('Register'.tr(),
                         style: AppTextStyles.labelLarge
                             .copyWith(color: AppColors.primary)),
                   ),
@@ -681,13 +685,13 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 20),
 
             Center(
-              child: Text('Create Account',
+              child: Text('Create Account'.tr(),
                   style: AppTextStyles.headlineMedium),
             ),
             const SizedBox(height: 6),
             Center(
               child: Text(
-                'Register as a new clinician',
+                'Register as a new clinician'.tr(),
                 style: AppTextStyles.bodyMedium
                     .copyWith(color: AppColors.textSecondary),
               ),
@@ -696,7 +700,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 28),
 
             // Full Name
-            Text('Full Name', style: AppTextStyles.labelLarge),
+            Text('Full Name'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regNameController,
@@ -710,7 +714,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 16),
 
             // Email (Username)
-            Text('Email Address (Username)', style: AppTextStyles.labelLarge),
+            Text('Email Address (Username)'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regEmailController,
@@ -730,7 +734,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 16),
 
             // Password
-            Text('Password', style: AppTextStyles.labelLarge),
+            Text('Password'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regPasswordController,
@@ -755,7 +759,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
             const SizedBox(height: 16),
 
             // Confirm Password
-            Text('Confirm Password', style: AppTextStyles.labelLarge),
+            Text('Confirm Password'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regConfirmController,
@@ -787,7 +791,7 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
 
             // Register button
             _buildPrimaryButton(
-              label: 'Create Account',
+              label: 'Create Account'.tr(),
               isLoading: _regLoading,
               onPressed: _handleClinicianRegister,
             ),
@@ -799,12 +803,12 @@ class _ClinicianAuthScreenState extends ConsumerState<_ClinicianAuthScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Already have an account? ',
+                  Text('Already have an account? '.tr(),
                       style: AppTextStyles.bodyMedium
                           .copyWith(color: AppColors.textSecondary)),
                   GestureDetector(
                     onTap: () => _tabController.animateTo(0),
-                    child: Text('Login',
+                    child: Text('Login'.tr(),
                         style: AppTextStyles.labelLarge
                             .copyWith(color: AppColors.primary)),
                   ),
@@ -1043,8 +1047,15 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
     });
 
     try {
+      // Opens the browser and returns immediately. The session does not exist
+      // yet — it arrives over the deep link once Google redirects back, and
+      // the router sends the user to home when it does.
+      //
+      // This used to navigate to home on the very next line, before any
+      // session existed. The router found no user and bounced straight back
+      // here, which is exactly what "Google sign-in doesn't work" looked like:
+      // a flicker, and no error to explain it.
       await ref.read(authServiceProvider).signInWithGoogle();
-      if (mounted) context.goNamed(AppRouter.home);
     } catch (e) {
       if (mounted) {
         setState(() => _loginError = _friendlyError(e.toString()));
@@ -1064,7 +1075,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
     try {
       final email = _regEmailController.text.trim();
 
-      final user = await ref.read(authServiceProvider).registerWithEmail(
+      final result = await ref.read(authServiceProvider).registerWithEmail(
             email: email,
             password: _regPasswordController.text,
             displayName: _regChildNameController.text.trim(),
@@ -1073,13 +1084,20 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
 
       // Create a child profile for this patient linked directly to their user ID
       await ref.read(firestoreServiceProvider).createPatientChildProfile(
-            childId: user.uid,
+            childId: result.user.uid,
             name: _regChildNameController.text.trim(),
             parentName: _regParentNameController.text.trim(),
             email: email,
           );
 
-      if (mounted) context.goNamed(AppRouter.home);
+      if (!mounted) return;
+      if (result.needsEmailConfirmation) {
+        setState(() => _regError =
+            'Account created. Open the confirmation link in your email — it '
+            'will bring you back here and sign you in.');
+        return;
+      }
+      context.goNamed(AppRouter.home);
     } catch (e) {
       if (mounted) {
         setState(() => _regError = _friendlyError(e.toString()));
@@ -1089,30 +1107,13 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
     }
   }
 
-  String _friendlyError(String error) {
-    final lower = error.toLowerCase();
-    if (lower.contains('invalid login credentials') ||
-        lower.contains('invalid_credentials') ||
-        lower.contains('wrong-password') ||
-        lower.contains('user-not-found')) {
-      return 'Invalid email or password. Please check your details or register.';
-    }
-    if (lower.contains('already registered') ||
-        lower.contains('email-already-in-use') ||
-        lower.contains('user_already_exists')) {
-      return 'An account already exists for this email address. Please sign in.';
-    }
-    if (lower.contains('weak') || lower.contains('at least 6')) {
-      return 'Password should be at least 6 characters long.';
-    }
-    if (lower.contains('invalid email') || lower.contains('invalid-email')) {
-      return 'Please enter a valid email address.';
-    }
-    if (lower.contains('network') || lower.contains('socket')) {
-      return 'Network error. Please check your connection.';
-    }
-    return 'Authentication error: ${error.replaceAll('AuthException(', '').replaceAll(')', '')}';
-  }
+  /// Delegates to the shared mapping in [AuthError].
+  ///
+  /// This existed twice in this file, in two classes, with wording that had
+  /// already drifted apart — and neither copy covered an unconfirmed email, a
+  /// rate limit, or a dropped connection, so those all fell through to raw
+  /// exception text.
+  String _friendlyError(String error) => AuthError.from(error).message;
 
   Future<void> _joinSession() async {
     final code = _sessionCode;
@@ -1216,12 +1217,12 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
 
             const SizedBox(height: 20),
             Center(
-              child: Text('Welcome Back!', style: AppTextStyles.headlineMedium),
+              child: Text('Welcome Back!'.tr(), style: AppTextStyles.headlineMedium),
             ),
             const SizedBox(height: 6),
             Center(
               child: Text(
-                'Login with your patient account',
+                'Login with your patient account'.tr(),
                 style: AppTextStyles.bodyMedium
                     .copyWith(color: AppColors.textSecondary),
               ),
@@ -1230,14 +1231,14 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 32),
 
             // Email (Username)
-            Text('Email Address (Username)', style: AppTextStyles.labelLarge),
+            Text('Email Address (Username)'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _loginUsernameController,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               decoration: InputDecoration(
-                hintText: 'your.email@example.com',
+                hintText: 'your.email@example.com'.tr(),
                 prefixIcon: const Icon(Icons.email_outlined),
                 filled: true,
                 fillColor: AppColors.surface,
@@ -1264,7 +1265,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 18),
 
             // Password
-            Text('Password', style: AppTextStyles.labelLarge),
+            Text('Password'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _loginPasswordController,
@@ -1272,7 +1273,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
               textInputAction: TextInputAction.done,
               onFieldSubmitted: (_) => _handlePatientLogin(),
               decoration: InputDecoration(
-                hintText: 'Enter password',
+                hintText: 'Enter password'.tr(),
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
                   icon: Icon(_loginObscure
@@ -1303,6 +1304,30 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
                   v == null || v.isEmpty ? 'Enter your password' : null,
             ),
 
+            // Forgot password
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => ForgotPasswordDialog.show(
+                  context,
+                  initialEmail: _loginUsernameController.text.trim(),
+                  accent: AppColors.accent,
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Forgot Password?'.tr(),
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: AppColors.accentDark,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+
             if (_loginError != null) ...[
               const SizedBox(height: 14),
               _buildErrorBanner(_loginError!),
@@ -1328,7 +1353,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
                         child: CircularProgressIndicator(
                             strokeWidth: 2.5, color: Colors.white),
                       )
-                    : Text('Login', style: AppTextStyles.buttonText),
+                    : Text('Login'.tr(), style: AppTextStyles.buttonText),
               ),
             ),
 
@@ -1341,7 +1366,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Text(
-                    'OR',
+                    'OR'.tr(),
                     style: AppTextStyles.labelMedium.copyWith(
                       color: const Color(0xFF94A3B8),
                       fontSize: 12,
@@ -1357,7 +1382,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
 
             // Google Login Button
             _buildGoogleButton(
-              label: 'Continue with Google',
+              label: 'Continue with Google'.tr(),
               onPressed: _handleGoogleLogin,
             ),
 
@@ -1372,16 +1397,16 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
                           .copyWith(color: AppColors.textSecondary)),
                   GestureDetector(
                     onTap: () => _tabController.animateTo(1),
-                    child: Text('Register',
+                    child: Text('Register'.tr(),
                         style: AppTextStyles.labelLarge
                             .copyWith(color: AppColors.accent)),
                   ),
-                  Text(' or ',
+                  Text(' or '.tr(),
                       style: AppTextStyles.bodyMedium
                           .copyWith(color: AppColors.textSecondary)),
                   GestureDetector(
                     onTap: () => _tabController.animateTo(2),
-                    child: Text('Join Session',
+                    child: Text('Join Session'.tr(),
                         style: AppTextStyles.labelLarge
                             .copyWith(color: AppColors.accent)),
                   ),
@@ -1406,13 +1431,13 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 12),
 
             Center(
-              child: Text('Create Patient Account',
+              child: Text('Create Patient Account'.tr(),
                   style: AppTextStyles.headlineMedium),
             ),
             const SizedBox(height: 6),
             Center(
               child: Text(
-                'Register with your details',
+                'Register with your details'.tr(),
                 style: AppTextStyles.bodyMedium
                     .copyWith(color: AppColors.textSecondary),
               ),
@@ -1421,7 +1446,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 24),
 
             // Child name
-            Text('Child\'s Name', style: AppTextStyles.labelLarge),
+            Text('Child\'s Name'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regChildNameController,
@@ -1435,7 +1460,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 14),
 
             // Parent name
-            Text('Parent\'s Name', style: AppTextStyles.labelLarge),
+            Text('Parent\'s Name'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regParentNameController,
@@ -1449,7 +1474,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 14),
 
             // Email (Username)
-            Text('Email Address (Username)', style: AppTextStyles.labelLarge),
+            Text('Email Address (Username)'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regEmailController,
@@ -1468,7 +1493,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 14),
 
             // Password
-            Text('Password', style: AppTextStyles.labelLarge),
+            Text('Password'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regPasswordController,
@@ -1493,7 +1518,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
             const SizedBox(height: 14),
 
             // Confirm
-            Text('Confirm Password', style: AppTextStyles.labelLarge),
+            Text('Confirm Password'.tr(), style: AppTextStyles.labelLarge),
             const SizedBox(height: 8),
             TextFormField(
               controller: _regConfirmController,
@@ -1540,7 +1565,7 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
                         child: CircularProgressIndicator(
                             strokeWidth: 2.5, color: Colors.white),
                       )
-                    : Text('Create Account', style: AppTextStyles.buttonText),
+                    : Text('Create Account'.tr(), style: AppTextStyles.buttonText),
               ),
             ),
 
@@ -1550,12 +1575,12 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Already registered? ',
+                  Text('Already registered? '.tr(),
                       style: AppTextStyles.bodyMedium
                           .copyWith(color: AppColors.textSecondary)),
                   GestureDetector(
                     onTap: () => _tabController.animateTo(0),
-                    child: Text('Login',
+                    child: Text('Login'.tr(),
                         style: AppTextStyles.labelLarge
                             .copyWith(color: AppColors.accent)),
                   ),
@@ -1597,10 +1622,10 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
           ),
 
           const SizedBox(height: 20),
-          Text('Join Session', style: AppTextStyles.headlineMedium),
+          Text('Join Session'.tr(), style: AppTextStyles.headlineMedium),
           const SizedBox(height: 6),
           Text(
-            'Enter the 6-digit code from your clinician',
+            'Enter the 6-digit code from your clinician'.tr(),
             style: AppTextStyles.bodyMedium
                 .copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
@@ -1701,8 +1726,8 @@ class _PatientAuthScreenState extends ConsumerState<_PatientAuthScreen>
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Your clinician will give you a session code. '
-                    'You don\'t need an account to join a session!',
+                    'Your clinician will give you a session code. You don\'t need an account to join a session!'
+                        .tr(),
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textSecondary,
                     ),

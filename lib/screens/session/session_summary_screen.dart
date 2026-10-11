@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +12,7 @@ import '../../config/theme/app_text_styles.dart';
 import '../../config/theme/app_theme.dart';
 import '../../config/routes/app_router.dart';
 import '../../config/constants/app_constants.dart';
+import '../../services/session_report_pdf.dart';
 import 'active_session_screen.dart';
 
 class SessionSummaryScreen extends ConsumerWidget {
@@ -22,11 +27,11 @@ class SessionSummaryScreen extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('No session data'),
+              Text('No session data'.tr()),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => context.goNamed(AppRouter.home),
-                child: const Text('Go Home'),
+                child: Text('Go Home'.tr()),
               ),
             ],
           ),
@@ -40,12 +45,13 @@ class SessionSummaryScreen extends ConsumerWidget {
     final dysfluent =
         state.utterances.where((u) => u.type == UtteranceType.dysfluent).length;
     final total = fluent + dysfluent;
-    final fluencyPct = total > 0 ? (fluent / total) * 100 : 0.0;
+    // Stuttering frequency is the clinical outcome; progress is a REDUCTION.
+    final dysfluencyPct = total > 0 ? (dysfluent / total) * 100 : 0.0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Session Summary'),
+        title: Text('Session Summary'.tr()),
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
@@ -63,9 +69,9 @@ class SessionSummaryScreen extends ConsumerWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                gradient: fluencyPct >= 80
+                gradient: dysfluencyPct >= 80
                     ? AppColors.smoothGradient
-                    : fluencyPct >= 50
+                    : dysfluencyPct >= 50
                         ? const LinearGradient(
                             colors: [AppColors.accent, AppColors.accentLight])
                         : AppColors.bumpyGradient,
@@ -75,7 +81,7 @@ class SessionSummaryScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   Text(
-                    '${fluencyPct.toStringAsFixed(1)}%',
+                    '${dysfluencyPct.toStringAsFixed(1)}%',
                     style: AppTextStyles.displayLarge.copyWith(
                       color: Colors.white,
                       fontSize: 56,
@@ -83,7 +89,7 @@ class SessionSummaryScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Fluency Rate',
+                    'Dysfluency / Stuttering Frequency (%)'.tr(),
                     style: AppTextStyles.titleMedium.copyWith(
                       color: Colors.white.withValues(alpha: 0.9),
                     ),
@@ -97,9 +103,9 @@ class SessionSummaryScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      fluencyPct >= 80
-                          ? '📈 Great session!'
-                          : fluencyPct >= 50
+                      dysfluencyPct <= 20
+                          ? '📉 Great session!'
+                          : dysfluencyPct <= 50
                               ? '📊 Good progress!'
                               : '💪 Keep practicing!',
                       style: AppTextStyles.labelMedium
@@ -125,7 +131,7 @@ class SessionSummaryScreen extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                     child: _buildStatCard(
-                        'Fluent', '$fluent', Icons.check_circle_outline,
+                        'Fluent Words', '$fluent', Icons.check_circle_outline,
                         AppColors.smoothGreen)),
               ],
             ).animate().fadeIn(delay: 200.ms),
@@ -136,7 +142,7 @@ class SessionSummaryScreen extends ConsumerWidget {
               children: [
                 Expanded(
                     child: _buildStatCard(
-                        'Dysfluent', '$dysfluent',
+                        'Stuttered Words', '$dysfluent',
                         Icons.replay_circle_filled_outlined,
                         AppColors.bumpyOrange)),
                 const SizedBox(width: 12),
@@ -178,7 +184,7 @@ class SessionSummaryScreen extends ConsumerWidget {
                     onPressed: () {
                       final summary = _buildShareText(
                         state.config.childName,
-                        fluencyPct,
+                        dysfluencyPct,
                         total,
                         fluent,
                         dysfluent,
@@ -189,7 +195,7 @@ class SessionSummaryScreen extends ConsumerWidget {
                       Share.share(summary);
                     },
                     icon: const Icon(Icons.share_rounded, size: 20),
-                    label: const Text('Share via WhatsApp'),
+                    label: Text('Share via WhatsApp'.tr()),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF25D366),
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -202,15 +208,22 @@ class SessionSummaryScreen extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      // PDF export — placeholder
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('PDF export coming soon!')),
-                      );
-                    },
+                    onPressed: () => _exportPdf(
+                      context,
+                      SessionReportData(
+                        childName: state.config.childName,
+                        therapyLevel: state.config.therapyLevel,
+                        date: DateTime.now(),
+                        duration: duration,
+                        totalUtterances: total,
+                        fluentCount: fluent,
+                        dysfluentCount: dysfluent,
+                        rewardCycles: state.rewardCycles,
+                        tokenGoal: state.config.tokenGoal,
+                      ),
+                    ),
                     icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
-                    label: const Text('Export PDF'),
+                    label: Text('Export PDF'.tr()),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -236,7 +249,7 @@ class SessionSummaryScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: Text('Done', style: AppTextStyles.buttonText),
+                child: Text('Done'.tr(), style: AppTextStyles.buttonText),
               ),
             ).animate().fadeIn(delay: 600.ms),
 
@@ -280,9 +293,49 @@ class SessionSummaryScreen extends ConsumerWidget {
     return '${mins}m ${secs}s';
   }
 
+  /// Generate the report and hand it to the system share sheet.
+  ///
+  /// The button used to show "PDF export coming soon" and produce nothing —
+  /// it looked like a broken export rather than an unbuilt feature. Sharing is
+  /// used rather than a silent write to disk because a file saved into the
+  /// app's private storage is somewhere the clinician cannot reach.
+  Future<void> _exportPdf(
+      BuildContext context, SessionReportData data) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 2),
+        content: Text('Preparing the report…'.tr()),
+      ),
+    );
+
+    try {
+      final bytes = await SessionReportPdf.build(data);
+
+      // Write it out so the share sheet offers a real file with a real name;
+      // sharing raw bytes gives the clinician an unnamed attachment.
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${data.fileName}');
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf', name: data.fileName)],
+        subject: 'BloomSpeech session report — ${data.childName}',
+      );
+    } catch (e) {
+      debugPrint('PDF export failed: $e');
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.error,
+          content: Text('Could not create the PDF report.'.tr()),
+        ),
+      );
+    }
+  }
+
   String _buildShareText(
     String childName,
-    double fluencyPct,
+    double dysfluencyPct,
     int total,
     int fluent,
     int dysfluent,
@@ -294,11 +347,11 @@ class SessionSummaryScreen extends ConsumerWidget {
 📊 *BloomSpeech Session Summary*
 ━━━━━━━━━━━━━━━━━━
 👤 Child: $childName
-📈 Fluency Rate: ${fluencyPct.toStringAsFixed(1)}%
+📉 Dysfluency / Stuttering Frequency: ${dysfluencyPct.toStringAsFixed(1)}%
 
-📝 Total Utterances: $total
-✅ Fluent: $fluent
-🔄 Dysfluent: $dysfluent
+📝 Total Words Recorded: $total
+✅ Fluent Words: $fluent
+🔄 Stuttered Words: $dysfluent
 🏆 Rewards Earned: $rewards
 
 ⏱ Duration: ${_formatDuration(duration)}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../utils/app_localizations.dart';
 import 'package:flutter/material.dart';
 import '../../../config/theme/app_colors.dart';
 import '../../../config/theme/app_text_styles.dart';
@@ -72,7 +73,7 @@ class _PlantWaterGameState extends State<PlantWaterGame>
               Navigator.pop(context);
               Navigator.pop(context);
             },
-            child: const Text('Done'),
+            child: Text('Done'.tr()),
           ),
         ],
       ),
@@ -157,7 +158,7 @@ class _PlantWaterGameState extends State<PlantWaterGame>
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Column(
                   children: [
-                    Text('Water Level',
+                    Text('Water Level'.tr(),
                         style: AppTextStyles.labelMedium),
                     const SizedBox(height: 8),
                     ClipRRect(
@@ -204,7 +205,7 @@ class _PlantWaterGameState extends State<PlantWaterGame>
                     children: [
                       const Text('💧', style: TextStyle(fontSize: 36)),
                       Text(
-                        'Water!',
+                        'Water!'.tr(),
                         style: AppTextStyles.labelMedium.copyWith(
                           color: Colors.white,
                         ),
@@ -217,7 +218,7 @@ class _PlantWaterGameState extends State<PlantWaterGame>
               const SizedBox(height: 16),
 
               Text(
-                'Tap to water your plant!',
+                'Tap to water your plant!'.tr(),
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.textSecondary,
                 ),

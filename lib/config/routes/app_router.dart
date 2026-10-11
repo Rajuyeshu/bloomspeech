@@ -18,6 +18,7 @@ import '../../screens/session/session_summary_screen.dart';
 import '../../screens/session/session_history_screen.dart';
 import '../../screens/reward/reward_screen.dart';
 import '../../screens/reward/mini_games/bubble_burst_game.dart';
+import '../../screens/reward/mini_games/balloon_pop_game.dart';
 import '../../screens/reward/mini_games/plant_water_game.dart';
 import '../../screens/reward/mini_games/rangoli_paint_game.dart';
 import '../../screens/progress/progress_dashboard.dart';
@@ -46,6 +47,7 @@ class AppRouter {
   static const String reward = 'reward';
   static const String bubbleBurst = 'bubbleBurst';
   static const String plantWater = 'plantWater';
+  static const String balloonPop = 'balloonPop';
   static const String rangoliPaint = 'rangoliPaint';
   static const String progressDashboard = 'progressDashboard';
   static const String sessionCompare = 'sessionCompare';
@@ -71,6 +73,7 @@ class AppRouter {
   static const String rewardPath = '/reward';
   static const String bubbleBurstPath = '/reward/bubble-burst';
   static const String plantWaterPath = '/reward/plant-water';
+  static const String balloonPopPath = '/reward/balloon-pop';
   static const String rangoliPaintPath = '/reward/rangoli-paint';
   static const String progressDashboardPath = '/progress/:childId';
   static const String sessionComparePath = '/progress/compare/:childId';
@@ -98,8 +101,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Allow kid join, active session, and reward screens regardless of auth
       if (isKidJoin || isKidSession || isRewardRoute) return null;
 
-      // Still loading auth state — stay on splash
-      if (isLoading && isSplash) return null;
+      // Auth state is still being restored from storage — decide nothing yet.
+      //
+      // This guard used to apply only on the splash route, so any cold start
+      // that resumed onto another route (say /home) fell through to the
+      // redirect below while the session was still loading, and the user was
+      // bounced to the login screen a moment before their session restored.
+      // Changing the device time zone is one of the ways Android restarts the
+      // process, which is why it looked like a time-zone bug.
+      if (isLoading) return null;
 
       // Not logged in and not on auth route — redirect to login
       if (!isLoggedIn && !isAuthRoute && !isSplash) {
@@ -205,12 +215,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => RewardScreen(
           miniGame: state.uri.queryParameters['miniGame'],
           sessionCode: state.uri.queryParameters['sessionCode'],
+          rewardType: state.uri.queryParameters['rewardType'],
+          physicalReward: state.uri.queryParameters['physicalReward'],
         ),
       ),
       GoRoute(
         path: AppRouter.bubbleBurstPath,
         name: AppRouter.bubbleBurst,
         builder: (context, state) => const BubbleBurstGame(),
+      ),
+      GoRoute(
+        path: AppRouter.balloonPopPath,
+        name: AppRouter.balloonPop,
+        builder: (context, state) => const BalloonPopGame(),
       ),
       GoRoute(
         path: AppRouter.plantWaterPath,

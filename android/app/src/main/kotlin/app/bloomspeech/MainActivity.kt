@@ -1,4 +1,4 @@
-package com.example.bloomspeech
+package app.bloomspeech
 
 import io.flutter.embedding.android.FlutterActivity
 

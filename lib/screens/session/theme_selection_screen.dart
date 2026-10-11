@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../../utils/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,19 +47,34 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
       final user = ref.read(currentUserProvider);
       if (user != null) {
         final code = _generateSessionCode();
-        final activeSession = ActiveSession(
+        final activeSession = ActiveSession.fromConfig(
+          updatedConfig,
           sessionCode: code,
           clinicianId: user.uid,
-          childId: updatedConfig.childId,
-          childName: updatedConfig.childName,
-          tokenGoal: updatedConfig.tokenGoal,
-          therapyLevel: updatedConfig.therapyLevel,
-          playTheme: updatedConfig.playTheme,
-          miniGame: updatedConfig.miniGame,
-          tokensPerFluent: updatedConfig.tokensPerFluent,
-          tokensPerDysfluent: updatedConfig.tokensPerDysfluent,
         );
-        await ref.read(firestoreServiceProvider).createActiveSession(activeSession);
+        try {
+          await ref
+              .read(firestoreServiceProvider)
+              .createActiveSession(activeSession);
+        } catch (e) {
+          // Without the shared row the child's device can never find this
+          // code. Starting the session anyway would leave the clinician
+          // reading out a code that only ever answers "Session not found".
+          debugPrint('createActiveSession failed: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                backgroundColor: AppColors.error,
+                duration: const Duration(seconds: 6),
+                content: Text(
+                  'Could not start the session — the child will not be able '
+                  'to join. Check your connection and try again.'.tr(),
+                ),
+              ),
+            );
+          }
+          return;
+        }
 
         // Crucial: Set the active session state with the EXACT same code!
         ref.read(activeSessionProvider.notifier).state = ActiveSessionState(
@@ -82,7 +98,7 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Choose a Theme'),
+        title: Text('Choose a Token'.tr()),
         leading: IconButton(
           onPressed: () {
             if (Navigator.of(context).canPop()) {
@@ -103,7 +119,7 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
             margin: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: _getThemeGradient(_previewTheme ?? PlayTheme.diyaFestival),
+                colors: _getThemeGradient(_previewTheme ?? PlayTheme.initial),
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -118,7 +134,7 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
                     borderRadius: BorderRadius.circular(24),
                     child: CustomPaint(
                       painter: _ThemePatternPainter(
-                        theme: _previewTheme ?? PlayTheme.diyaFestival,
+                        theme: _previewTheme ?? PlayTheme.initial,
                       ),
                     ),
                   ),
@@ -129,7 +145,7 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        (_previewTheme ?? PlayTheme.diyaFestival).emoji,
+                        (_previewTheme ?? PlayTheme.initial).emoji,
                         style: const TextStyle(fontSize: 56),
                       )
                           .animate(
@@ -143,13 +159,13 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
                           ),
                       const SizedBox(height: 10),
                       Text(
-                        (_previewTheme ?? PlayTheme.diyaFestival).displayName,
+                        (_previewTheme ?? PlayTheme.initial).displayName,
                         style: AppTextStyles.headlineMedium
                             .copyWith(color: Colors.white),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        (_previewTheme ?? PlayTheme.diyaFestival).description,
+                        (_previewTheme ?? PlayTheme.initial).description,
                         style: AppTextStyles.bodySmall
                             .copyWith(color: Colors.white.withValues(alpha: 0.8)),
                       ),
@@ -170,9 +186,9 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
                 mainAxisSpacing: 12,
                 childAspectRatio: 0.85,
               ),
-              itemCount: PlayTheme.values.length,
+              itemCount: PlayTheme.selectable.length,
               itemBuilder: (context, index) {
-                final theme = PlayTheme.values[index];
+                final theme = PlayTheme.selectable[index];
                 final isSelected = _selectedTheme == theme;
 
                 return GestureDetector(
@@ -257,7 +273,7 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
                 label: Text(
                   _selectedTheme != null
                       ? 'Select ${_selectedTheme!.displayName}'
-                      : 'Choose a Theme',
+                      : 'Choose a Token',
                   style: AppTextStyles.buttonText,
                 ),
                 style: ElevatedButton.styleFrom(
@@ -289,6 +305,28 @@ class _ThemeSelectionScreenState extends ConsumerState<ThemeSelectionScreen> {
         return [const Color(0xFFFF4081), const Color(0xFFC51162)];
       case PlayTheme.kiteFestival:
         return [const Color(0xFF7C4DFF), const Color(0xFF304FFE)];
+
+      // Container themes, tinted to their token.
+      case PlayTheme.flowerBasket:
+        return [const Color(0xFFFF7BA9), const Color(0xFFD81B60)];
+      case PlayTheme.iceCreamBox:
+        return [const Color(0xFF4FC3F7), const Color(0xFF0288D1)];
+      case PlayTheme.chocolateBox:
+        return [const Color(0xFF8D6E63), const Color(0xFF4E342E)];
+      case PlayTheme.cakeStand:
+        return [const Color(0xFFFF8A80), const Color(0xFFD84315)];
+      case PlayTheme.coinPiggyBank:
+        return [const Color(0xFFF48FB1), const Color(0xFFC2185B)];
+      case PlayTheme.starChart:
+        return [const Color(0xFFFFD54F), const Color(0xFFF9A825)];
+      case PlayTheme.carGarage:
+        return [const Color(0xFF78909C), const Color(0xFF37474F)];
+      case PlayTheme.superheroStickers:
+        return [const Color(0xFF9575CD), const Color(0xFF512DA8)];
+      case PlayTheme.princessStickers:
+        return [const Color(0xFFCE93D8), const Color(0xFF7B1FA2)];
+      case PlayTheme.fishBowl:
+        return [const Color(0xFF4DD0E1), const Color(0xFF00838F)];
     }
   }
 }

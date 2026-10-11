@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../utils/app_localizations.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme/app_colors.dart';
 import '../../config/theme/app_text_styles.dart';
 import '../../config/constants/app_constants.dart';
+import '../../services/crash_log.dart';
 import '../../services/firestore_service.dart';
 import '../../services/audio_service.dart';
 import '../../services/auth_service.dart';
@@ -45,6 +47,8 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
   bool _appliedAudioMuted = false;
   bool _appliedVideoMuted = false;
   bool _appliedVideoStarted = false;
+  bool _warmedAudio = false;
+  bool _isSmoothFeedback = true;
 
   @override
   void initState() {
@@ -91,15 +95,64 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
           // Attach this kid's login to the clinician's child record the first
           // time they join, so their home and progress screens can find the
           // sessions that get saved against it.
-          final user = ref.read(currentUserProvider);
+          // A child who joined by code is not signed in, so there is no id to
+          // announce and nothing the clinician can link. Give the device an
+          // anonymous identity first — otherwise this whole branch is skipped
+          // and the child's progress can never work.
+          var user = ref.read(currentUserProvider);
+          if (user == null) {
+            try {
+              user = await ref
+                  .read(authServiceProvider)
+                  .signInAnonymouslyForKid();
+            } catch (e) {
+              debugPrint('Anonymous sign-in failed: $e');
+              CrashLog.record(
+                'Child device could not be identified',
+                StackTrace.fromString(
+                  'This device joined by code and is not signed in, and '
+                  'anonymous sign-in failed: $e\n\n'
+                  'Enable "Anonymous sign-ins" in the Supabase dashboard '
+                  '(Authentication -> Sign In / Providers), or have the family '
+                  'register a patient account. Until then the clinician cannot '
+                  'link this device and progress here stays empty.',
+                ),
+              );
+            }
+          }
+
           if (user != null && session.childId.isNotEmpty) {
             // Announce who is on this device. The clinician picks this up when
             // saving and writes the link with their own credentials — the kid
             // may not be permitted to touch `children` at all.
-            ref.read(firestoreServiceProvider).updateActiveSession(
-              sessionCode: widget.sessionCode,
-              data: {'kidUserId': user.uid},
-            );
+            //
+            // This is the first link in the chain that ends with the child
+            // being able to see their own progress, and it was fire-and-forget
+            // over a call that swallowed its errors: if it failed there was no
+            // kid id on the row, the clinician silently skipped the linking
+            // step, and the child's progress stayed empty permanently. Record
+            // a failure so Data Diagnostics can report it.
+            ref
+                .read(firestoreServiceProvider)
+                .updateActiveSession(
+                  sessionCode: widget.sessionCode,
+                  data: {'kidUserId': user.uid},
+                )
+                .then((ok) {
+              if (!ok) {
+                CrashLog.record(
+                  'Kid could not announce its id on the session row',
+                  StackTrace.fromString(
+                    'updateActiveSession(kidUserId) returned false for session '
+                    '${widget.sessionCode}. Either active_sessions.kid_user_id '
+                    'is missing (run supabase_setup_all.sql) or row-level '
+                    'security refused the update. Without it the clinician '
+                    'cannot link this device to a child, and progress here '
+                    'will stay empty.',
+                  ),
+                );
+              }
+            });
 
             // Best-effort direct link as well, for setups where the kid does
             // have write access. Failure here is expected and non-fatal now
@@ -114,6 +167,13 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
           }
         }
 
+        if (!_warmedAudio) {
+          _warmedAudio = true;
+          // Same reason as the clinician side: pay the synthesis cost before
+          // the first utterance, not during it.
+          ref.read(audioServiceProvider).warmUp(session.language);
+        }
+
         _applyClinicianCallControls(session);
 
         // Detect reward triggered by clinician (reward_active becomes true)
@@ -126,6 +186,9 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                 queryParameters: {
                   'miniGame': session.miniGame,
                   'sessionCode': widget.sessionCode,
+                  'rewardType': session.rewardType,
+                  if (session.physicalReward != null)
+                    'physicalReward': session.physicalReward!,
                 },
               );
               // Kid returned from reward screen
@@ -193,6 +256,17 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
     context.goNamed(AppRouter.home);
   }
 
+  /// Whether this device should be in the video call.
+  ///
+  /// Normally the clinician decides, via `kid_video_started`. If the database
+  /// predates that column there is no channel to say so — and gating on a flag
+  /// that can never become true meant the child never joined at all while the
+  /// clinician sat in the room alone. In that case fall back to joining
+  /// whenever the session is live, which is how the app behaved before the
+  /// control existed.
+  bool _videoAllowed(ActiveSession session) =>
+      session.kidCallColumnsPresent ? session.kidVideoStarted : true;
+
   /// Mirrors the clinician's call controls onto this device.
   ///
   /// Jitsi's public server won't make the clinician a real moderator, so
@@ -201,10 +275,16 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
   void _applyClinicianCallControls(ActiveSession session) {
     // Clinician turned the call off — leave the conference. Driven by the flag
     // rather than widget teardown, which fired for unrelated rebuilds.
-    if (_appliedVideoStarted && !session.kidVideoStarted) {
+    final videoOn = _videoAllowed(session);
+
+    // Only hang up when the clinician actually turned the call off. A row that
+    // simply does not carry these columns parses as `false`, which is
+    // indistinguishable from "stop the call" — and this runs on every two
+    // second poll, so one such read would drop the child out mid-session.
+    if (_appliedVideoStarted && !videoOn && session.kidCallColumnsPresent) {
       VideoCallService.leaveCall();
     }
-    _appliedVideoStarted = session.kidVideoStarted;
+    _appliedVideoStarted = videoOn;
 
     if (session.kidAudioMuted != _appliedAudioMuted) {
       _appliedAudioMuted = session.kidAudioMuted;
@@ -213,6 +293,52 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
     if (session.kidVideoMuted != _appliedVideoMuted) {
       _appliedVideoMuted = session.kidVideoMuted;
       VideoCallService.setVideoMuted(session.kidVideoMuted);
+    }
+  }
+
+
+
+  /// The glyph the feedback overlay animates, chosen to match the active play
+  /// theme so a fluent utterance lights a diya, ripens a mango, and so on —
+  /// rather than showing the same generic star for every theme.
+  ({String glyph, String label}) _themeFeedbackGlyph(
+      PlayTheme theme, bool isSmooth) {
+    if (!isSmooth) {
+      // Gentle and non-punitive: the same object, dimmed or unlit.
+      switch (theme) {
+        case PlayTheme.diyaFestival:
+          return (glyph: '🪔', label: 'flicker');
+        case PlayTheme.rangoliBuilder:
+          return (glyph: '🌸', label: 'fade');
+        case PlayTheme.mangoHarvest:
+          return (glyph: '🥭', label: 'fade');
+        case PlayTheme.peacockGarden:
+          return (glyph: '🪶', label: 'fade');
+        case PlayTheme.lotusPond:
+          return (glyph: '🪷', label: 'fade');
+        case PlayTheme.kiteFestival:
+          return (glyph: '🪁', label: 'dip');
+        default:
+          // Container themes: the same reward object, dimmed rather than
+          // replaced, so a lost token never introduces a new image.
+          return (glyph: theme.emoji, label: 'fades');
+      }
+    }
+    switch (theme) {
+      case PlayTheme.diyaFestival:
+        return (glyph: '🪔', label: 'lights up');
+      case PlayTheme.rangoliBuilder:
+        return (glyph: '🌸', label: 'blooms');
+      case PlayTheme.mangoHarvest:
+        return (glyph: '🥭', label: 'ripens');
+      case PlayTheme.peacockGarden:
+        return (glyph: '🦚', label: 'fans out');
+      case PlayTheme.lotusPond:
+        return (glyph: '🌸', label: 'blooms');
+      case PlayTheme.kiteFestival:
+        return (glyph: '🪁', label: 'soars');
+      default:
+        return (glyph: theme.emoji, label: 'collected');
     }
   }
 
@@ -226,7 +352,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
           children: [
             const Text('🎉', style: TextStyle(fontSize: 28)),
             const SizedBox(width: 12),
-            Text('Session Complete!',
+            Text('Session Complete!'.tr(),
                 style: AppTextStyles.titleLarge
                     .copyWith(color: AppColors.primary)),
           ],
@@ -235,7 +361,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Great job! Your clinician has ended the session.',
+              'Great job! Your clinician has ended the session.'.tr(),
               style: AppTextStyles.bodyMedium
                   .copyWith(color: AppColors.textSecondary),
             ),
@@ -263,7 +389,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                 );
               },
               icon: const Icon(Icons.insights_rounded, size: 18),
-              label: const Text('My Progress'),
+              label: Text('My Progress'.tr()),
               style: TextButton.styleFrom(foregroundColor: AppColors.primary),
             ),
           ElevatedButton(
@@ -274,7 +400,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text('Done! 🌟'),
+            child: Text('Done! 🌟'.tr()),
           ),
         ],
       ),
@@ -294,15 +420,15 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
             const Text('🧑‍⚕️', style: TextStyle(fontSize: 26)),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('Session in progress',
+              child: Text('Session in progress'.tr(),
                   style: AppTextStyles.titleLarge
                       .copyWith(color: AppColors.primary)),
             ),
           ],
         ),
         content: Text(
-          'Your therapist is running this session. It will finish when they '
-          'end it — keep practising!',
+          'Your therapist is running this session. It will finish when they end it — keep practising!'
+              .tr(),
           style: AppTextStyles.bodyMedium
               .copyWith(color: AppColors.textSecondary),
         ),
@@ -315,7 +441,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text('OK 👍'),
+            child: Text('OK 👍'.tr()),
           ),
         ],
       ),
@@ -335,13 +461,13 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
               end: Alignment.bottomCenter,
             ),
           ),
-          child: const Center(
+          child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(color: AppColors.accent),
-                SizedBox(height: 20),
-                Text('Connecting to session...'),
+                const CircularProgressIndicator(color: AppColors.accent),
+                const SizedBox(height: 20),
+                Text('Connecting to session...'.tr()),
               ],
             ),
           ),
@@ -370,7 +496,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                       size: 64, color: AppColors.error),
                   const SizedBox(height: 20),
                   Text(
-                    'Session not found 😕',
+                    'Session not found 😕'.tr(),
                     style: AppTextStyles.headlineMedium.copyWith(
                       color: AppColors.textPrimary,
                     ),
@@ -393,7 +519,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                       _fetchSession();
                     },
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Try Again'),
+                    label: Text('Try Again'.tr()),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: Colors.white,
@@ -407,7 +533,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('← Go Back'),
+                    child: Text('← Go Back'.tr()),
                   ),
                 ],
               ),
@@ -464,7 +590,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                   const SizedBox(height: 6),
 
                   Text(
-                    'Keep talking! You\'re doing great!',
+                    'Keep talking! You\'re doing great!'.tr(),
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -472,62 +598,36 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
 
                   const SizedBox(height: 12),
 
-                  // Kid-attractive Theme Token Board Widget
-                  SizedBox(
-                    height: isSmallScreen ? 180 : 240,
-                    child: ThemeTokenBoardWidget(
-                      theme: PlayTheme.values.firstWhere(
-                        (t) => t.name == session.playTheme,
-                        orElse: () => PlayTheme.diyaFestival,
-                      ),
-                      currentTokens: session.currentTokenCount,
-                      tokenGoal: session.tokenGoal,
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Token dots (big, kid-friendly)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 30),
-                    child: Wrap(
-                      spacing: isSmallScreen ? 8 : 10,
-                      runSpacing: isSmallScreen ? 8 : 10,
-                      alignment: WrapAlignment.center,
-                      children: List.generate(
-                        session.tokenGoal,
-                        (index) {
-                          final isFilled =
-                              index < session.currentTokenCount;
-                          return AnimatedContainer(
-                            duration:
-                                const Duration(milliseconds: 400),
-                            width: isSmallScreen ? 18 : 22,
-                            height: isSmallScreen ? 18 : 22,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isFilled
-                                  ? AppColors.tokenGold
-                                  : AppColors.tokenEmpty
-                                      .withValues(alpha: 0.4),
-                              boxShadow: isFilled
-                                  ? [
-                                      BoxShadow(
-                                        color: AppColors.tokenGold
-                                            .withValues(alpha: 0.5),
-                                        blurRadius: 8,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: isFilled
-                                ? Icon(Icons.star_rounded,
-                                    color: Colors.white, size: isSmallScreen ? 11 : 14)
-                                : null,
-                          );
-                        },
-                      ),
-                    ),
+                  // The token board. Sized to the space actually available
+                  // rather than a fixed height: this is the one thing on the
+                  // screen the child is meant to look at, and it previously
+                  // sat small with empty space beneath it.
+                  //
+                  // There used to be a second row of gold stars below this,
+                  // duplicating the same count in a different visual language.
+                  // A preschooler seeing chocolates in a box and then a row of
+                  // stars has to work out that they are the same thing, and the
+                  // stars ignored the chosen theme entirely.
+                  LayoutBuilder(
+                    builder: (context, _) {
+                      final screen = MediaQuery.of(context).size.height;
+                      // Leave room for the greeting, the video panel and the
+                      // reward banner; give everything else to the board.
+                      final reserved = isSmallScreen ? 300.0 : 330.0;
+                      final boardHeight =
+                          (screen - reserved).clamp(200.0, 420.0);
+                      return SizedBox(
+                        height: boardHeight,
+                        child: ThemeTokenBoardWidget(
+                          theme: PlayTheme.values.firstWhere(
+                            (t) => t.name == session.playTheme,
+                            orElse: () => PlayTheme.initial,
+                          ),
+                          currentTokens: session.currentTokenCount,
+                          tokenGoal: session.tokenGoal,
+                        ),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 12),
@@ -554,7 +654,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                   // Embedded Jitsi Video Call (below the token board).
                   // Only once the clinician has started it — the kid never
                   // opens the call on their own.
-                  if (_showEmbeddedVideoCall && session.kidVideoStarted) ...[
+                  if (_showEmbeddedVideoCall && _videoAllowed(session)) ...[
                     const SizedBox(height: 12),
                     Container(
                       height: isSmallScreen ? 130 : 180,
@@ -597,13 +697,13 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                                 color: Colors.white70, size: 32),
                             const SizedBox(height: 8),
                             Text(
-                              'Waiting for your therapist…',
+                              'Waiting for your therapist…'.tr(),
                               style: AppTextStyles.titleSmall
                                   .copyWith(color: Colors.white),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
-                              'They will start the video call',
+                            Text(
+                              'They will start the video call'.tr(),
                               style: TextStyle(
                                   color: Colors.white54, fontSize: 12),
                             ),
@@ -619,7 +719,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                       padding: const EdgeInsets.only(bottom: 40),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: PlayTheme.values.map((t) {
+                        children: PlayTheme.selectable.take(6).map((t) {
                           return Padding(
                             padding:
                                 const EdgeInsets.symmetric(horizontal: 8),
@@ -642,24 +742,47 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                     opacity: _showFeedback ? 1 : 0,
                     child: IgnorePointer(
                       child: Container(
-                        color: _feedbackEmoji == '🌟'
+                        color: _isSmoothFeedback
                             ? AppColors.smoothGreen.withValues(alpha: 0.2)
                             : AppColors.bumpyOrange.withValues(alpha: 0.15),
                         child: Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                _feedbackEmoji,
-                                style: const TextStyle(fontSize: 80),
-                              )
-                                  .animate()
-                                  .scale(
-                                    begin: const Offset(0.3, 0.3),
-                                    end: const Offset(1, 1),
-                                    duration: 500.ms,
-                                    curve: Curves.elasticOut,
+                              // Fluent: a celebratory pop with a shimmer.
+                              // Dysfluent: a soft flicker and settle — never a
+                              // shake or a shrink, which would read as a
+                              // reprimand to the child.
+                              if (_isSmoothFeedback)
+                                Text(
+                                  _feedbackEmoji,
+                                  style: const TextStyle(fontSize: 84),
+                                )
+                                    .animate()
+                                    .scale(
+                                      begin: const Offset(0.3, 0.3),
+                                      end: const Offset(1, 1),
+                                      duration: 500.ms,
+                                      curve: Curves.elasticOut,
+                                    )
+                                    .shimmer(
+                                      duration: 900.ms,
+                                      color: AppColors.tokenGold,
+                                    )
+                              else
+                                Text(
+                                  _feedbackEmoji,
+                                  style: TextStyle(
+                                    fontSize: 76,
+                                    color: Colors.white.withValues(alpha: 0.9),
                                   ),
+                                )
+                                    .animate()
+                                    .fadeIn(duration: 250.ms)
+                                    .then()
+                                    .fadeOut(duration: 220.ms)
+                                    .then()
+                                    .fadeIn(duration: 260.ms),
                               const SizedBox(height: 16),
                               Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -668,7 +791,7 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
                                   _feedbackText,
                                   style:
                                       AppTextStyles.headlineMedium.copyWith(
-                                    color: _feedbackEmoji == '🌟'
+                                    color: _isSmoothFeedback
                                         ? AppColors.smoothGreenDark
                                         : AppColors.bumpyOrangeDark,
                                 ),
@@ -695,12 +818,18 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
   void _triggerFeedback(bool isSmooth, String language) {
     final phrases = BilingualPhrases.feedback;
     String key;
+    final theme = PlayTheme.values.firstWhere(
+      (t) => t.name == (_session?.playTheme ?? ''),
+      orElse: () => PlayTheme.diyaFestival,
+    );
+    final visual = _themeFeedbackGlyph(theme, isSmooth);
+    _feedbackEmoji = visual.glyph;
+    _isSmoothFeedback = isSmooth;
+
     if (isSmooth) {
       key = 'fluent_${Random().nextInt(5) + 1}';
-      _feedbackEmoji = '🌟';
     } else {
       key = 'dysfluent_${Random().nextInt(3) + 1}';
-      _feedbackEmoji = '💪';
     }
     _feedbackText = BilingualPhrases.getPhrase(phrases, key, language);
     if (_feedbackText.isEmpty) {
@@ -712,15 +841,20 @@ class _KidSessionScreenState extends ConsumerState<KidSessionScreen>
     setState(() => _showFeedback = true);
 
     // Play audio on kid's device too
+    // The English phrase is spoken instead when the device has no voice for the
+    // session language — the child hears words rather than mangled phonemes.
+    final fallback = BilingualPhrases.getPhrase(phrases, key, 'en');
     if (isSmooth) {
       ref.read(audioServiceProvider).playSmoothFeedback(
             phrase: _feedbackText,
             languageCode: language,
+            fallbackPhrase: fallback,
           );
     } else {
       ref.read(audioServiceProvider).playBumpyFeedback(
             phrase: _feedbackText,
             languageCode: language,
+            fallbackPhrase: fallback,
           );
     }
 

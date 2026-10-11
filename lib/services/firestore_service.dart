@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide Session;
 import '../models/child_profile.dart';
 import '../models/session.dart';
+import '../utils/app_time.dart';
 import '../config/constants/app_constants.dart';
 
 /// Database service — handles CRUD operations and Realtime Stream sync via Supabase
@@ -26,7 +27,7 @@ class FirestoreService {
         'name': name,
         'email': email,
         'phone': phone,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': AppTime.toStorage(DateTime.now()),
       });
     } catch (e) {
       debugPrint('Supabase profile set warning: $e');
@@ -60,17 +61,35 @@ class FirestoreService {
     map['clinician_id'] = clinicianId;
     map.remove('id'); // Always remove client-side ID so PostgreSQL auto-generates primary key
 
-    try {
-      final res = await _supabase
-          .from('children')
-          .insert(map)
-          .select('id')
-          .single();
-      return res['id'] as String;
-    } catch (e) {
-      debugPrint('Supabase addChild error: $e');
-      return child.id.isNotEmpty ? child.id : DateTime.now().millisecondsSinceEpoch.toString();
+    // Drop any column this database does not have yet and retry, rather than
+    // failing the whole insert. `baseline_dysfluency_pct` arrives with a later
+    // migration, and a clinician should still be able to add a child before it
+    // has been run — they simply cannot record a baseline until then.
+    for (var attempt = 0; attempt <= map.length; attempt++) {
+      try {
+        final res = await _supabase
+            .from('children')
+            .insert(map)
+            .select('id')
+            .single();
+        return res['id'] as String;
+      } on PostgrestException catch (e) {
+        final column = _isMissingColumn(e) ? missingColumnName(e.message) : null;
+        const essential = {'name', 'clinician_id'};
+        if (column == null ||
+            essential.contains(column) ||
+            !map.containsKey(column)) {
+          debugPrint('Supabase addChild error: $e');
+          throw Exception('Could not save the child profile: ${e.message}');
+        }
+        debugPrint('children.$column missing; saving without it');
+        map.remove(column);
+      } catch (e) {
+        debugPrint('Supabase addChild error: $e');
+        throw Exception('Could not save the child profile: $e');
+      }
     }
+    throw Exception('Could not save the child profile.');
   }
 
   /// Create a child profile for a registered patient (kid) linked directly to their user ID
@@ -86,7 +105,7 @@ class FirestoreService {
         'name': name,
         'clinician_id': 'patient_self', // Patient is self-managed
         'current_level': 'word',
-        'enrollment_date': DateTime.now().toIso8601String(),
+        'enrollment_date': AppTime.toStorage(DateTime.now()),
         'gender': 'other',
         'total_sessions': 0,
       });
@@ -107,6 +126,14 @@ class FirestoreService {
       if (data.containsKey('gender')) updateData['gender'] = data['gender'];
       if (data.containsKey('currentLevel')) updateData['current_level'] = data['currentLevel'];
       if (data.containsKey('totalSessions')) updateData['total_sessions'] = data['totalSessions'];
+      if (data.containsKey('lastSessionDate')) {
+        final v = data['lastSessionDate'];
+        updateData['last_session_date'] =
+            v is DateTime ? AppTime.toStorage(v) : v?.toString();
+      }
+      if (data.containsKey('baselineDysfluencyPct')) {
+        updateData['baseline_dysfluency_pct'] = data['baselineDysfluencyPct'];
+      }
       if (data.containsKey('dateOfBirth')) {
         updateData['date_of_birth'] = data['dateOfBirth'] is DateTime
             ? (data['dateOfBirth'] as DateTime).toIso8601String().split('T').first
@@ -183,7 +210,7 @@ class FirestoreService {
       'child_id': childId,
       'clinician_id': clinicianId,
       'session_number': session.sessionNumber,
-      'date': session.date.toIso8601String(),
+      'date': AppTime.toStorage(session.date),
       'therapy_level': session.therapyLevel,
       'play_theme': session.playTheme,
       'mini_game': session.miniGame,
@@ -202,6 +229,9 @@ class FirestoreService {
       data: {
         'totalSessions': total,
         'currentLevel': session.therapyLevel,
+        // Was never written, so the profile card showed "Last Session: None"
+        // no matter how many sessions had been completed.
+        'lastSessionDate': session.date,
       },
     );
 
@@ -219,7 +249,32 @@ class FirestoreService {
   /// the older behaviour" rather than a fatal error, so a missed migration
   /// degrades the feature instead of blanking the screen.
   static bool _isMissingColumn(PostgrestException e) =>
-      e.code == '42703' || e.message.contains('does not exist');
+      e.code == '42703' ||
+      e.code == 'PGRST204' ||
+      e.message.contains('does not exist') ||
+      e.message.contains('schema cache');
+
+  /// The column Postgres or PostgREST is complaining about, if it named one.
+  ///
+  /// Two different wordings reach us depending on which layer rejects the
+  /// write:
+  ///   42703    column "tokens_per_fluent" of relation "active_sessions" does not exist
+  ///   PGRST204 Could not find the 'tokens_per_fluent' column of 'active_sessions' in the schema cache
+  ///
+  /// Reading the name out of the error means a write can adapt to whatever
+  /// schema is actually deployed, instead of relying on a hardcoded list of
+  /// columns that someone has to remember to keep in step with the migrations.
+  static String? missingColumnName(String message) {
+    for (final pattern in [
+      RegExp(r'column "([^"]+)"'),
+      RegExp(r"'([^']+)' column"),
+      RegExp(r"column '([^']+)'"),
+    ]) {
+      final match = pattern.firstMatch(message);
+      if (match != null) return match.group(1);
+    }
+    return null;
+  }
 
   Future<void> linkKidToChild({
     required String childId,
@@ -249,7 +304,7 @@ class FirestoreService {
           .from('children')
           .update({
             'linked_user_id': kidUserId,
-            'linked_at': DateTime.now().toIso8601String(),
+            'linked_at': AppTime.toStorage(DateTime.now()),
           })
           .eq('id', childId)
           .select('id') as List;
@@ -464,7 +519,7 @@ class FirestoreService {
     try {
       final rows = utterances.map((u) => {
             'session_id': sessionId,
-            'timestamp': u.timestamp.toIso8601String(),
+            'timestamp': AppTime.toStorage(u.timestamp),
             'type': u.type.name,
             'token_count_after': u.tokenCountAfter,
           }).toList();
@@ -508,39 +563,78 @@ class FirestoreService {
   //  ACTIVE SESSIONS (Supabase Realtime Dual-Device Sync)
   // ═══════════════════════════════════════════════
 
-  /// Create an active session for dual-device sync
+  /// Create an active session for dual-device sync.
+  ///
+  /// The row is built by [ActiveSession.toMap] rather than assembled here, so
+  /// there is one definition of the mapping instead of two free to drift.
+  ///
+  /// If the deployed table is missing a column — the migrations have not been
+  /// run, or a newer build writes a field this database does not have yet —
+  /// the offending column is dropped and the write retried. Getting this wrong
+  /// is severe out of proportion to the cause: no row means the child's device
+  /// cannot find the session at all, and the only symptom is "Session not
+  /// found" on a code the clinician is looking at.
+  ///
+  /// Throws if the session could not be created. It must not fail silently:
+  /// the clinician would otherwise read out a code that can never work.
   Future<void> createActiveSession(ActiveSession session) async {
-    try {
-      await _supabase.from('active_sessions').upsert({
-        'session_code': session.sessionCode,
-        'clinician_id': session.clinicianId,
-        'child_id': session.childId,
-        'child_name': session.childName,
-        'current_token_count': session.currentTokenCount,
-        'token_goal': session.tokenGoal,
-        'therapy_level': session.therapyLevel,
-        'play_theme': session.playTheme,
-        'mini_game': session.miniGame,
-        'language': session.language,
-        'reward_cycles_completed': session.rewardCyclesCompleted,
-        'reward_active': false,
-        'mini_game_active': false,
-        'status': 'active',
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('Supabase createActiveSession warning: $e');
+    // toCreateMap, not toMap: creation is an upsert, and the kid-owned columns
+    // must not be written over. See ActiveSession.toCreateMap.
+    final row = session.toCreateMap()
+      ..['updated_at'] = AppTime.toStorage(DateTime.now());
+
+    final dropped = <String>[];
+
+    // Bounded: each pass removes one column, so this cannot spin.
+    for (var attempt = 0; attempt <= row.length; attempt++) {
+      try {
+        await _supabase.from('active_sessions').upsert(row);
+        if (dropped.isNotEmpty) {
+          debugPrint(
+              'active_sessions: created without ${dropped.join(", ")} — '
+              'run the pending migrations to enable those features');
+        }
+        return;
+      } on PostgrestException catch (e) {
+        final column = _isMissingColumn(e) ? missingColumnName(e.message) : null;
+        // Never drop a column the session cannot work without; if one of these
+        // is genuinely missing the schema is broken and must be reported.
+        const essential = {
+          'session_code',
+          'clinician_id',
+          'child_id',
+          'token_goal',
+        };
+        if (column == null ||
+            essential.contains(column) ||
+            !row.containsKey(column)) {
+          throw Exception(
+              'Could not create the session row (${e.code}): ${e.message}');
+        }
+        row.remove(column);
+        dropped.add(column);
+      }
     }
+
+    throw Exception('Could not create the session row after dropping '
+        '${dropped.length} unknown columns.');
   }
 
   /// Update active session (partial update)
-  Future<void> updateActiveSession({
+  /// Returns true only if the update actually reached the row.
+  ///
+  /// This used to swallow every failure into a debugPrint. That is tolerable
+  /// for a token count — the next poll corrects it — but not for the flag that
+  /// tells the child's device to join the video call: a failed write there
+  /// means the clinician's device enters the room alone and nothing anywhere
+  /// says why.
+  Future<bool> updateActiveSession({
     required String sessionCode,
     required Map<String, dynamic> data,
   }) async {
     try {
       final updateMap = <String, dynamic>{
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': AppTime.toStorage(DateTime.now()),
       };
       if (data.containsKey('currentTokenCount')) {
         updateMap['current_token_count'] = data['currentTokenCount'];
@@ -551,7 +645,7 @@ class FirestoreService {
       if (data.containsKey('lastFeedbackTime')) {
         final val = data['lastFeedbackTime'];
         updateMap['last_feedback_time'] = val is DateTime
-            ? val.toIso8601String()
+            ? AppTime.toStorage(val)
             : val.toString();
       }
       if (data.containsKey('rewardCyclesCompleted')) {
@@ -575,6 +669,12 @@ class FirestoreService {
       if (data.containsKey('kidUserId')) {
         updateMap['kid_user_id'] = data['kidUserId'];
       }
+      if (data.containsKey('rewardType')) {
+        updateMap['reward_type'] = data['rewardType'];
+      }
+      if (data.containsKey('physicalReward')) {
+        updateMap['physical_reward'] = data['physicalReward'];
+      }
       if (data.containsKey('status')) {
         updateMap['status'] = data['status'];
       }
@@ -583,8 +683,10 @@ class FirestoreService {
           .from('active_sessions')
           .update(updateMap)
           .eq('session_code', sessionCode);
+      return true;
     } catch (e) {
       debugPrint('Supabase updateActiveSession warning: $e');
+      return false;
     }
   }
 
@@ -660,6 +762,43 @@ class FirestoreService {
       result: kidUserId.isEmpty ? '(none — not signed in)' : kidUserId,
       ok: kidUserId.isNotEmpty,
     ));
+
+    // Which migrations have actually been applied. Without this, a missing
+    // column and a genuine permission problem look identical from the app: both
+    // end as "0 rows", and the report cannot say which SQL to run.
+    await probe('Database schema', 'required columns on children / active_sessions',
+        () async {
+      final missing = <String, String>{};
+
+      Future<void> check(String table, String column, String migration) async {
+        try {
+          await _supabase.from(table).select(column).limit(1);
+        } on PostgrestException catch (e) {
+          if (_isMissingColumn(e)) {
+            missing['$table.$column'] = migration;
+          }
+          // A permission error here is not a schema problem; the RLS probes
+          // below are the ones that report on access.
+        }
+      }
+
+      await check('children', 'linked_user_id', 'supabase_setup_all.sql');
+      await check('children', 'linked_at', 'supabase_setup_all.sql');
+      await check('active_sessions', 'kid_user_id', 'supabase_setup_all.sql');
+      await check('active_sessions', 'kid_video_started', 'supabase_setup_all.sql');
+      await check('active_sessions', 'reward_type', 'supabase_setup_all.sql');
+
+      if (missing.isEmpty) {
+        return 'All required columns present — the migrations have been run.';
+      }
+
+      throw StateError(
+        'MISSING: ${missing.keys.join(", ")}.\n'
+        'Run ${missing.values.toSet().join(", ")} in the Supabase SQL editor. '
+        'Until then the kid cannot be linked to a child, so progress stays '
+        'empty however many sessions are completed.',
+      );
+    });
 
     String? resolvedChildId;
 

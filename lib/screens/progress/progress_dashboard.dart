@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,7 @@ import '../../config/routes/app_router.dart';
 import '../../config/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../models/child_profile.dart';
 import '../../models/session.dart';
 import '../../widgets/back_to_home_scope.dart';
 import '../../widgets/load_error_view.dart';
@@ -22,14 +24,14 @@ class ProgressDashboard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     if (user == null) {
-      return const Scaffold(body: Center(child: Text('Login required')));
+      return Scaffold(body: Center(child: Text('Login required'.tr())));
     }
 
     return BackToHomeScope(
       child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Progress Dashboard'),
+        title: Text('Progress Dashboard'.tr()),
         leading: IconButton(
           onPressed: () {
             if (context.canPop()) {
@@ -47,7 +49,7 @@ class ProgressDashboard extends ConsumerWidget {
               pathParameters: {'childId': childId},
             ),
             icon: const Icon(Icons.compare_arrows_rounded),
-            tooltip: 'Compare Sessions',
+            tooltip: 'Compare Sessions'.tr(),
           ),
         ],
       ),
@@ -61,13 +63,23 @@ class ProgressDashboard extends ConsumerWidget {
             return const Center(child: CircularProgressIndicator());
           }
           // A failed query must not look like "no sessions yet".
+          //
+          // On the CHILD's device the commonest cause is not a fault but a
+          // missing link: until the clinician has completed a session, the
+          // child's login is attached to no child record, and the query either
+          // returns nothing or is refused. Showing a raw database error there
+          // is both alarming and unactionable for a parent.
           if (snapshot.hasError) {
+            if (user.role == 'kid') {
+              return _buildNotLinkedYet(context);
+            }
             return LoadErrorView(error: snapshot.error!);
           }
 
           final sessions = (snapshot.data ?? []).reversed.toList();
 
           if (sessions.isEmpty) {
+            if (user.role == 'kid') return _buildNotLinkedYet(context);
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -75,10 +87,10 @@ class ProgressDashboard extends ConsumerWidget {
                   Icon(Icons.insights_rounded,
                       size: 60, color: AppColors.textHint.withValues(alpha: 0.3)),
                   const SizedBox(height: 16),
-                  Text('No session data yet',
+                  Text('No session data yet'.tr(),
                       style: AppTextStyles.headlineSmall),
                   const SizedBox(height: 8),
-                  Text('Complete a session to see progress',
+                  Text('Complete a session to see progress'.tr(),
                       style: AppTextStyles.bodyMedium
                           .copyWith(color: AppColors.textSecondary)),
                 ],
@@ -91,10 +103,28 @@ class ProgressDashboard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ─── Fluency Progress Chart ───
-                _buildSectionTitle('Fluency Progress', Icons.show_chart_rounded),
+                // ─── Stuttering frequency across sessions ───
+                // The primary outcome is a REDUCTION in this figure, so the
+                // chart is framed as stuttering frequency rather than as
+                // fluency development.
+                _buildSectionTitle('Stuttering Frequency Across Sessions',
+                    Icons.show_chart_rounded),
                 const SizedBox(height: 14),
-                _buildFluencyChart(sessions).animate().fadeIn(duration: 600.ms),
+                // The baseline comes from the child record; a database that
+                // predates the column simply yields null and no line.
+                FutureBuilder<ChildProfile?>(
+                  // The baseline is decoration on this chart, not its subject.
+                  // On the child's own device the child row may be unreadable,
+                  // and that must cost the reference line — never the chart.
+                  future: ref
+                      .read(firestoreServiceProvider)
+                      .getChild(clinicianId: user.uid, childId: childId)
+                      .catchError((_) => null),
+                  builder: (context, snap) => _buildFluencyChart(
+                    sessions,
+                    snap.data?.baselineDysfluencyPct,
+                  ),
+                ).animate().fadeIn(duration: 600.ms),
 
                 const SizedBox(height: 28),
 
@@ -145,12 +175,54 @@ class ProgressDashboard extends ConsumerWidget {
     );
   }
 
-  // ─── Fluency Line Chart ───
-  Widget _buildFluencyChart(List<Session> sessions) {
+  /// What the child's device shows when it has no sessions to display.
+  ///
+  /// Deliberately not phrased as an error: from the family's side nothing has
+  /// gone wrong, and the situation resolves itself once a session is completed.
+  /// The diagnostics link is there for the clinician, not the parent.
+  Widget _buildNotLinkedYet(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🌱', style: TextStyle(fontSize: 56)),
+            const SizedBox(height: 16),
+            Text('No progress to show yet'.tr(),
+                textAlign: TextAlign.center,
+                style: AppTextStyles.headlineSmall),
+            const SizedBox(height: 10),
+            Text(
+              'Your charts appear here once your therapist finishes a session '
+                      'with you. Come back after your next session.'
+                  .tr(),
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            TextButton.icon(
+              onPressed: () => context.pushNamed(AppRouter.dataDiagnostics),
+              icon: const Icon(Icons.troubleshoot_rounded, size: 18),
+              label: Text('Details for your therapist'.tr()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Stuttering frequency line chart ───
+  ///
+  /// [baselinePct] is the child's pre-treatment stuttering frequency, drawn as
+  /// a reference line so the reduction since baseline is readable at a glance.
+  /// Null when it has not been recorded, in which case no line is drawn.
+  Widget _buildFluencyChart(List<Session> sessions, double? baselinePct) {
     final spots = sessions.asMap().entries.map((entry) {
       return FlSpot(
         entry.key.toDouble(),
-        entry.value.stats.fluencyPercentage,
+        entry.value.stats.dysfluencyPercentage,
       );
     }).toList();
 
@@ -179,6 +251,12 @@ class ProgressDashboard extends ConsumerWidget {
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             bottomTitles: AxisTitles(
+              axisNameSize: 20,
+              axisNameWidget: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Session number',
+                    style: AppTextStyles.labelSmall.copyWith(fontSize: 10)),
+              ),
               sideTitles: SideTitles(
                 showTitles: true,
                 interval: 1,
@@ -198,6 +276,9 @@ class ProgressDashboard extends ConsumerWidget {
               ),
             ),
             leftTitles: AxisTitles(
+              axisNameSize: 22,
+              axisNameWidget: Text('Dysfluency / Stuttering Frequency (%)',
+                  style: AppTextStyles.labelSmall.copyWith(fontSize: 10)),
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 35,
@@ -210,16 +291,36 @@ class ProgressDashboard extends ConsumerWidget {
             ),
           ),
           borderData: FlBorderData(show: false),
-          // Clinical goal zone (80-100%)
+          // Clinical goal band. On this axis lower is better, so the band
+          // sits at the BOTTOM — shading the old 80-100% zone here would have
+          // marked the worst outcomes as the target.
           rangeAnnotations: RangeAnnotations(
             horizontalRangeAnnotations: [
               HorizontalRangeAnnotation(
-                y1: AppConstants.clinicalGoalMin,
-                y2: AppConstants.clinicalGoalMax,
+                y1: 0,
+                y2: 100 - AppConstants.clinicalGoalMin,
                 color: AppColors.smoothGreen.withValues(alpha: 0.08),
               ),
             ],
           ),
+          extraLinesData: baselinePct == null
+              ? null
+              : ExtraLinesData(horizontalLines: [
+                  HorizontalLine(
+                    y: baselinePct,
+                    color: AppColors.bumpyOrange.withValues(alpha: 0.8),
+                    strokeWidth: 2,
+                    dashArray: [6, 4],
+                    label: HorizontalLineLabel(
+                      show: true,
+                      alignment: Alignment.topRight,
+                      style: AppTextStyles.labelSmall.copyWith(
+                          fontSize: 9, color: AppColors.bumpyOrange),
+                      labelResolver: (_) =>
+                          'Baseline ${baselinePct.toStringAsFixed(1)}%',
+                    ),
+                  ),
+                ]),
           lineBarsData: [
             LineChartBarData(
               spots: spots,
@@ -259,8 +360,8 @@ class ProgressDashboard extends ConsumerWidget {
                   if (sessionIndex >= sessions.length) return null;
                   final session = sessions[sessionIndex];
                   return LineTooltipItem(
-                    '${session.stats.fluencyPercentage.toStringAsFixed(1)}%\n'
-                    '${session.stats.totalUtterances} utt.',
+                    '${session.stats.dysfluencyPercentage.toStringAsFixed(1)}%\n'
+                    '${session.stats.totalUtterances} words',
                     AppTextStyles.labelSmall.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
@@ -323,6 +424,12 @@ class ProgressDashboard extends ConsumerWidget {
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             bottomTitles: AxisTitles(
+              axisNameSize: 20,
+              axisNameWidget: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Session number',
+                    style: AppTextStyles.labelSmall.copyWith(fontSize: 10)),
+              ),
               sideTitles: SideTitles(
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
@@ -367,13 +474,9 @@ class ProgressDashboard extends ConsumerWidget {
 
   // ─── Level Timeline ───
   Widget _buildLevelTimeline(List<Session> sessions) {
-    final levels = [
-      TherapyLevel.word,
-      TherapyLevel.sentence,
-      TherapyLevel.continuousSpeech,
-      TherapyLevel.narrative,
-      TherapyLevel.conversational,
-    ];
+    // The four current levels. Hardcoding the list meant the retired sentence
+    // level kept appearing here after it was withdrawn.
+    final levels = TherapyLevel.selectable;
 
     // Determine which levels have been used
     final usedLevels = <String>{};
@@ -540,7 +643,7 @@ class ProgressDashboard extends ConsumerWidget {
     final totalRewards =
         sessions.fold<int>(0, (sum, s) => sum + s.stats.rewardCyclesCompleted);
     final avgFluency = sessions.isNotEmpty
-        ? sessions.fold<double>(0, (sum, s) => sum + s.stats.fluencyPercentage) /
+        ? sessions.fold<double>(0, (sum, s) => sum + s.stats.dysfluencyPercentage) /
             sessions.length
         : 0.0;
 
@@ -555,7 +658,7 @@ class ProgressDashboard extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: _buildStatTile(
-                  'Avg Fluency', '${avgFluency.toStringAsFixed(1)}%',
+                  'Avg Stuttering %', '${avgFluency.toStringAsFixed(1)}%',
                   Icons.trending_up_rounded, AppColors.smoothGreen)),
           ],
         ),
@@ -564,7 +667,7 @@ class ProgressDashboard extends ConsumerWidget {
           children: [
             Expanded(
               child: _buildStatTile(
-                  'Total Utterances', '$totalUtterances',
+                  'Total Words Recorded', '$totalUtterances',
                   Icons.chat_bubble_outline, AppColors.info)),
             const SizedBox(width: 12),
             Expanded(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,14 +21,14 @@ class ChildListScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('My Children'),
+        title: Text('My Children'.tr()),
         leading: IconButton(
           onPressed: () => context.goNamed(AppRouter.home),
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
         ),
       ),
       body: user == null
-          ? const Center(child: Text('Please log in'))
+          ? Center(child: Text('Please log in'.tr()))
           : FutureBuilder<List<ChildProfile>>(
               future: ref
                   .read(firestoreServiceProvider)
@@ -55,7 +56,7 @@ class ChildListScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.goNamed(AppRouter.addChild),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add Child'),
+        label: Text('Add Child'.tr()),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -171,7 +172,7 @@ class ChildListScreen extends ConsumerWidget {
                   icon: const Icon(Icons.play_circle_filled_rounded),
                   color: AppColors.primary,
                   iconSize: 36,
-                  tooltip: 'Start session',
+                  tooltip: 'Start session'.tr(),
                 ),
               ],
             ),
@@ -212,12 +213,12 @@ class ChildListScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'No Children Added Yet',
+              'No Children Added Yet'.tr(),
               style: AppTextStyles.headlineSmall,
             ),
             const SizedBox(height: 10),
             Text(
-              'Add your first child to begin therapy sessions',
+              'Add your first child to begin therapy sessions'.tr(),
               style: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.textSecondary,
               ),
@@ -227,7 +228,7 @@ class ChildListScreen extends ConsumerWidget {
             ElevatedButton.icon(
               onPressed: () => context.goNamed(AppRouter.addChild),
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Child'),
+              label: Text('Add Child'.tr()),
             ),
           ],
         ),

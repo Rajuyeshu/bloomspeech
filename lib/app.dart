@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/theme/app_theme.dart';
 import 'config/routes/app_router.dart';
 import 'services/auth_service.dart';
+import 'services/language_service.dart';
 
 /// Root MaterialApp widget with routing, theming, and lifecycle management.
 ///
@@ -70,12 +71,20 @@ class _BloomSpeechAppState extends ConsumerState<BloomSpeechApp>
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
 
+    // Watching the language here is what makes switching take effect
+    // everywhere: `'text'.tr()` reads the active language during build, so the
+    // whole tree has to rebuild when it changes. The key forces that rebuild
+    // rather than letting Flutter reuse elements with stale strings.
+    final language = ref.watch(appLanguageProvider);
+
     return MaterialApp.router(
+      key: ValueKey('app-${language.code}'),
       title: 'BloomSpeech',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.light,
+      locale: Locale(language.code),
       routerConfig: router,
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -148,7 +149,7 @@ class _KidJoinScreenState extends ConsumerState<KidJoinScreen> {
                 const SizedBox(height: 28),
 
                 Text(
-                  'Join Your Session! 🎮',
+                  'Join Your Session! 🎮'.tr(),
                   style: AppTextStyles.headlineLarge.copyWith(
                     color: AppColors.textPrimary,
                   ),
@@ -157,7 +158,7 @@ class _KidJoinScreenState extends ConsumerState<KidJoinScreen> {
                 const SizedBox(height: 8),
 
                 Text(
-                  'Ask your doctor for the session code',
+                  'Ask your doctor for the session code'.tr(),
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -185,7 +186,7 @@ class _KidJoinScreenState extends ConsumerState<KidJoinScreen> {
                   child: Column(
                     children: [
                       Text(
-                        'Enter Code',
+                        'Enter Code'.tr(),
                         style: AppTextStyles.titleMedium.copyWith(
                           color: AppColors.textSecondary,
                         ),

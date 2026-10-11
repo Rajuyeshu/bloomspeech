@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_localizations.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../config/theme/app_colors.dart';
@@ -84,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen>
 
               // Tagline
               Text(
-                'Nurturing Fluent Speech',
+                'Nurturing Fluent Speech'.tr(),
                 style: AppTextStyles.bodyLarge.copyWith(
                   color: Colors.white.withValues(alpha: 0.8),
                   letterSpacing: 0.5,
@@ -107,18 +108,6 @@ class _SplashScreenState extends State<SplashScreen>
                   _buildDecorativeDot(400),
                 ],
               ),
-
-              const SizedBox(height: 16),
-
-              Text(
-                'Response Cost Therapy',
-                style: AppTextStyles.labelMedium.copyWith(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  letterSpacing: 2,
-                ),
-              )
-                  .animate()
-                  .fadeIn(delay: 1200.ms, duration: 800.ms),
 
               const SizedBox(height: 48),
             ],
